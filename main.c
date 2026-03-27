@@ -17,12 +17,10 @@ int main(void){ // não receberemos argumentos da linha de comando
 	switch(funcionalidade){
 		case 1:
 			func_1(strtok(NULL, " "), strtok(NULL, " ")); // executa a funcionalidade 1, passando como argumento os nomes dos arquivos especificados pelo usuário. A ordem dos argumentos na função é o contrário da ordem digitada pelo usuário, pois o C executa primeiro o strtok mais à direita, e por último o mais à esquerda
-			break;
+			//break;
 		case 2:
-			
-			break;
-			
-			
+			func_2("saida.bin");
+			break;	 
 	}
 	
 	return 0;

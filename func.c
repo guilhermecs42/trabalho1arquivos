@@ -4,6 +4,10 @@
 #include<stdio.h>
 #include<string.h>
 
+#define HEADER_S 17 // O tamanho do cabeçalho do registro
+#define REG_DADOS_S 80 // O tamanho de cada registro
+#define BYTES_FIXOS_S 37 // Número de bytes em campos fixos no registro
+
 #define LIXO 0x24 // O conteúdo de bytes não utilizados é 0x24, $ em ascii, apelidado de LIXO nesse código
 #define LIXO_INT 0x24242424 // Um campo de tipo inteiro não utilizado teria valor $$$$, ou 0x24242424, apelidado de LIXO_INT nesse código
 typedef struct reg_dados_struct REG_DADOS_STRUCT; // Essa struct é uma representação do registro de dados na memória. Não é exatamente a mesma estrutura, pois as strings foram substituídas por ponteiros, e elas terminam em \0, diferentemente da versão em disco.
@@ -23,100 +27,97 @@ struct reg_dados_struct {
 	char* nomeLinha; // ponteiro para uma string de tamanho tamNomeLinha + 1, terminada em \0
 };
 
+// Função auxiliar para processar strings
+void processar_string(char* campo, int* tam, char** destino){
+    if(campo == NULL || strlen(campo) == 0){
+        *tam = 0;
+        *destino = NULL;
+    }else{
+        *destino = strdup(campo);
+        *tam = strlen(*destino);
+    }
+}
+
+// Função auxiliar para processar inteiros
+int processar_int(char* campo){
+    if(campo == NULL || strlen(campo) == 0){
+        return -1;
+    }
+    return atoi(campo);
+}
+
 // essa função recebe uma linha do arquivo csv e retorna um struct REG_DADOS_STRUCT contendo as informações naquela linha
 REG_DADOS_STRUCT* ler_linha_csv(char* linha){
+    if(linha == NULL) return NULL;
 
-	printf("DEBUG: A LINHA LIDA É %s\n", linha);
-	
-	char* inicio_campo = linha;
-	char* final_campo = inicio_campo;
-	REG_DADOS_STRUCT* registro_lido = (REG_DADOS_STRUCT*) malloc (sizeof(REG_DADOS_STRUCT));
-	registro_lido->removido = 0;
-	registro_lido->proximo = -1;
-	
-	for(int i=0; i<8; i++) { // cada linha do csv tem 8 campos para serem lidos
+    REG_DADOS_STRUCT* registro_lido = (REG_DADOS_STRUCT*) malloc(sizeof(REG_DADOS_STRUCT));
+    registro_lido->removido = 0; // Seguindo a lógica de registro ativo
+    registro_lido->proximo = -1;
 
-		while(*final_campo != ',' && *final_campo != '\0') final_campo++; // incrementa final_campo até ele apontar para a vírgula ou para o final
-		if(*final_campo == '\0' && i != 7){ // se o campo a ser lido é o último mas não é o oitavo campo, então a linha tem menos campos do que deveria
-			printf("Falha no processamento do arquivo.\n");
-			printf("DEBUG: LINHA COM MENOS CAMPOS DO QUE O ESPERADO\n");
-			free(registro_lido);
-			exit(1);
-		}
-		*final_campo = '\0'; // troca a vírgula por \0
-		
-		if(*inicio_campo == ','){ // quando o registro é nulo, representado por ",," no arquivo 
-			switch(i){
-			case 0:
-				registro_lido->codEstacao = LIXO_INT;
-				break;
-			case 1:
-				registro_lido->tamNomeEstacao = 0;
-				registro_lido->nomeEstacao = NULL;
-				break;
-			case 2:
-				registro_lido->codLinha = LIXO_INT;
-				break;
-			case 3:
-				registro_lido->tamNomeEstacao = 0;
-				registro_lido->nomeEstacao = NULL;
-			case 4:
-				registro_lido->codProxEstacao = LIXO_INT;
-				break;
-			case 5:
-				registro_lido->distProxEstacao = LIXO_INT;
-				break;
-			case 6:
-				registro_lido->codLinhaIntegra = LIXO_INT;
-				break;
-			case 7:
-				registro_lido->codEstIntegra = LIXO_INT;
-				break;
-			}
-		}else{
-			switch(i){
-				case 0:
-					registro_lido->codEstacao = atoi(inicio_campo);
-					break;
-				case 1:
-					char* nomeEstacao = strdup(inicio_campo);
-					registro_lido->tamNomeEstacao = strlen(nomeEstacao);
-					registro_lido->nomeEstacao = nomeEstacao;
-					break;
-				case 2:
-					registro_lido->codLinha = atoi(inicio_campo);
-					break;
-				case 3:
-					char* nomeLinha = strdup(inicio_campo);
-					registro_lido->tamNomeLinha = strlen(nomeLinha);
-					registro_lido->nomeLinha = nomeLinha;
-				case 4:
-					registro_lido->codProxEstacao = atoi(inicio_campo);
-					break;
-				case 5:
-					registro_lido->distProxEstacao = atoi(inicio_campo);
-					break;
-				case 6:
-					registro_lido->codLinhaIntegra = atoi(inicio_campo);
-					break;
-				case 7:
-					registro_lido->codEstIntegra = atoi(inicio_campo);
-					break;
-			}
-		}
-		
-		inicio_campo = final_campo + 1;
-		final_campo = inicio_campo;
-	}
-	
-	if(*(final_campo-1) != '\0'){ // se o byte anterior não era \0, então era uma vírgula, o que significa que ainda há campos a serem lidos
-		printf("Falha no processamento do arquivo.\n");
-		printf("DEBUG: LINHA COM MAIS CAMPOS DO QUE O ESPERADO\n");
-		free(registro_lido);
+    char *campo;
+    char *ptr = linha; // strsep modifica o ponteiro, usamos um auxiliar
+
+    for(int i = 0; i < 8; i++){
+        // strsep extrai o texto até a próxima vírgula e coloca \0 no lugar dela
+        campo = strsep(&ptr, ",");
+
+        // Se strsep retornar NULL antes do 8º campo, a linha está incompleta
+        if(campo == NULL){
+            printf("Falha no processamento: linha incompleta.\n");
+            free(registro_lido);
+            exit(1);
+        }
+
+        switch(i){
+            case 0: registro_lido->codEstacao = processar_int(campo); break;
+            case 1: processar_string(campo, &registro_lido->tamNomeEstacao, &registro_lido->nomeEstacao); break;
+            case 2: registro_lido->codLinha = processar_int(campo); break;
+            case 3: processar_string(campo, &registro_lido->tamNomeLinha, &registro_lido->nomeLinha); break;
+            case 4: registro_lido->codProxEstacao = processar_int(campo); break;
+            case 5: registro_lido->distProxEstacao = processar_int(campo); break;
+            case 6: registro_lido->codLinhaIntegra = processar_int(campo); break;
+            case 7: registro_lido->codEstIntegra = processar_int(campo); break;
+        }
+    }
+
+    // Se após os 8 campos o ponteiro 'ptr' não for NULL, existem campos extras
+    if(ptr != NULL){
+        printf("Falha no processamento: linha com campos extras.\n");
+	    free(registro_lido);
 		exit(1);
+    }
+
+    return registro_lido;
+}
+
+void escreve_registro(REG_DADOS_STRUCT* registro_lido, FILE* filestream_bin){
+
+	fwrite(&(registro_lido->removido), 1, 1, filestream_bin);
+	fwrite(&(registro_lido->proximo), 1, 4, filestream_bin);
+	fwrite(&(registro_lido->codEstacao), 1, 4, filestream_bin);
+	fwrite(&(registro_lido->codLinha), 1, 4, filestream_bin);
+	fwrite(&(registro_lido->codProxEstacao), 1, 4, filestream_bin);
+	fwrite(&(registro_lido->distProxEstacao), 1, 4, filestream_bin);
+	fwrite(&(registro_lido->codLinhaIntegra), 1, 4, filestream_bin);
+	fwrite(&(registro_lido->codEstIntegra), 1, 4, filestream_bin);
+	fwrite(&(registro_lido->tamNomeEstacao), 1, 4, filestream_bin);
+
+	if(registro_lido->tamNomeEstacao != 0){
+		fwrite(registro_lido->nomeEstacao, 1, registro_lido->tamNomeEstacao, filestream_bin);
 	}
-	
-	return registro_lido;
+
+	fwrite(&(registro_lido->tamNomeLinha), 1, 4, filestream_bin); // armazena o tamanho do nome da linha
+
+	if(registro_lido->tamNomeLinha != 0){
+		fwrite(registro_lido->nomeLinha, 1, registro_lido->tamNomeLinha, filestream_bin); // como tamNomeLinha foi inicializado por strlen, o \0 no final não será escrito
+	}
+
+	int num_bytes_lixo = REG_DADOS_S - BYTES_FIXOS_S - registro_lido->tamNomeEstacao - registro_lido->tamNomeLinha; // Calcula o número de bytes a serem preenchidos com lixo
+	char lixo = LIXO;
+	for(int i = 0; i < num_bytes_lixo; i++){
+		fwrite(&lixo, 1, 1, filestream_bin);
+	}
+
 }
 
 void func_1(char* arquivoSaida, char* arquivoEntrada){ // a ordem dos argumentos é o contrário da ordem digitada pelo usuário, devido à ordem de empilhamento dos argumentos na memória, lembrando que cada argumento é o retorno de uma chamada de strtok
@@ -134,7 +135,7 @@ void func_1(char* arquivoSaida, char* arquivoEntrada){ // a ordem dos argumentos
 	
 	// CRIAR ARQUIVO BINÁRIO EM MODO ESCRITA
 	filestream_bin = fopen(arquivoSaida, "wb"); // abre o arquivo de saída em modo escrita e como binário
-	if(filestream_csv == NULL){ // se falhou
+	if(filestream_bin == NULL){ // se falhou
 		printf("Falha no processamento do arquivo.\n");
 		printf("DEBUG: ERRO AO ABRIR BIN\n");
 		goto fechar;
@@ -166,28 +167,28 @@ void func_1(char* arquivoSaida, char* arquivoEntrada){ // a ordem dos argumentos
 		goto fechar;
 	}
 	
-	REG_DADOS_STRUCT* registro_lido;
-	while(!feof(filestream_csv)){
+	while(fgets(linha, sizeof(linha), filestream_csv)){
 	
 		printf("DEBUG: LENDO REGISTRO DE DADOS\n");
 	
-		fgets(linha, 103, filestream_csv);
 		linha[strcspn(linha, "\r\n")] = '\0'; // faz a linha terminar em \0
-		registro_lido = ler_linha_csv(linha);
+		REG_DADOS_STRUCT* registro_lido = ler_linha_csv(linha);
 		
 		// ESCREVER O REGISTRO NO BINÁRIO
-		
-		fwrite(registro_lido, 1, 33, filestream_bin); // escreve os dados até e incluindo tamNomeEstacao
-		fwrite(registro_lido->nomeEstacao, 1, registro_lido->tamNomeEstacao, filestream_bin); // como tamNomeEstacao foi inicializado por strlen, o \0 no final não será escrito
-		fwrite(&(registro_lido->tamNomeLinha), 1, 4, filestream_bin); // armazena o tamanho do nome da linha
-		fwrite(registro_lido->nomeLinha, 1, registro_lido->tamNomeLinha, filestream_bin); // como tamNomeLinha foi inicializado por strlen, o \0 no final não será escrito
-		
+
+		escreve_registro(registro_lido, filestream_bin);
+
 		free(registro_lido->nomeEstacao);
 		free(registro_lido->nomeLinha);
 		free(registro_lido);
+
 		
 		printf("DEBUG: REGISTRO DE DADOS ESCRITO COM SUCESSO\n");
 	}
+
+	fseek(filestream_bin, 0, SEEK_SET);
+	unsigned char status = 0x01;
+	fwrite(&status, 1, 1, filestream_bin);
 	
 	// FECHAR ARQUIVOS
 	
@@ -211,3 +212,110 @@ void func_1(char* arquivoSaida, char* arquivoEntrada){ // a ordem dos argumentos
 	
 	return;
 }
+
+// Func 2
+
+void print_campo_string(FILE* filestream_bin) {
+    int tam;
+    // Lê o indicador de tamanho
+    if(fread(&tam, 4, 1, filestream_bin) != 1) return;
+
+    if(tam > 0){
+        char *temp = (char* )malloc(tam + 1);
+        if(temp){
+            fread(temp, 1, tam, filestream_bin);
+            temp[tam] = '\0';
+            printf("%s ", temp);
+            free(temp);
+        }
+    }else{
+        printf("NULO ");
+    }
+}
+
+void print_registro(FILE* filestream_bin){
+    int codEstacao, codLinha, codProxEst, dist, codLinhaInteg, codEstInteg;
+    long pos_inicial = ftell(filestream_bin) - 1; // O primeiro byte já foi lido nesse ponto
+
+    // Pulamos o campo 'proximo' que não é impresso
+    fseek(filestream_bin, 4, SEEK_CUR);
+
+    fread(&codEstacao, 4, 1, filestream_bin);
+    fread(&codLinha, 4, 1, filestream_bin);
+
+    // Demais campos inteiros
+    int campos[4]; // proxEst, dist, linhaInteg, estInteg
+    fread(campos, 4, 4, filestream_bin);
+
+    printf("%d ", codEstacao);
+
+    // Nome estação
+    print_campo_string(filestream_bin);
+
+    printf("%d ", codLinha);
+
+    // Nome linha
+    print_campo_string(filestream_bin);
+    
+	// Printa os demais campos inteiros
+    for(int i = 0; i < 4; i++){
+        if(campos[i] != -1){
+			printf("%d ", campos[i]);
+		}else{
+			printf("NULO ");
+		}
+    }
+    printf("\n");
+
+    // Move o ponteiro para o início do próximo registro
+    fseek(filestream_bin, pos_inicial + REG_DADOS_S, SEEK_SET);
+}
+
+void func_2(char* arquivoLeitura){
+
+	FILE* filestream_bin = NULL;
+
+	// ABRIR BIN EM MODO LEITURA
+	filestream_bin = fopen(arquivoLeitura, "rb"); // abre o arquivo bin em modo leitura
+	if(filestream_bin == NULL){ // se falhou
+		printf("Falha no processamento do arquivo.\n");
+		printf("DEBUG: ERRO AO ABRIR BIN\n");
+		return;
+	}
+
+	printf("DEBUG: ARQUIVO ABERTO COM SUCESSO\n");
+
+	unsigned char status;
+
+	// Lê o status do cabeçalho do arquivo
+
+	fread(&status, 1, 1, filestream_bin);
+	if(status != 1){
+		printf("Falha no processamento do arquivo.\n");
+		printf("DEBUG: REGISTRO INCONSISTENTE\n");
+		fclose(filestream_bin);
+		return;
+	}
+
+	fseek(filestream_bin, HEADER_S, SEEK_SET);
+
+	unsigned char removido;
+	bool reg_existe = false;
+
+	while(fread(&removido, 1, 1, filestream_bin) == 1){
+		if(removido == 1){ // O registro foi removido, salta o registro ao invés de ler
+			fseek(filestream_bin, REG_DADOS_S - 1, SEEK_CUR);
+		}else{
+			print_registro(filestream_bin);
+			reg_existe = true;	
+		}
+	}
+
+    if (!reg_existe) {
+        printf("Registro inexistente.\n");
+    }
+
+	fclose(filestream_bin);
+}
+
+
