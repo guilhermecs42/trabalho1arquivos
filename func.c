@@ -3,6 +3,7 @@
 #include<stdbool.h>
 #include<stdio.h>
 #include<string.h>
+#include<ctype.h>
 
 #define HEADER_S 17 // O tamanho do cabeçalho do registro
 #define REG_DADOS_S 80 // O tamanho de cada registro
@@ -26,6 +27,37 @@ struct reg_dados_struct { // ESSE STRUCT SERVE APENAS PARA ORGANIZAR O CÓDIGO E
 	int tamNomeLinha;
 	char* nomeLinha; // ponteiro para uma string de tamanho tamNomeLinha + 1, terminada em \0
 };
+
+void ScanQuoteString(char *str) {
+    char R;
+
+    while ((R = getchar()) != EOF && isspace(R))
+        ; // ignorar espaços, \r, \n...
+
+    if (R == 'N' || R == 'n') { // campo NULO
+        getchar();
+        getchar();
+        getchar();       // ignorar o "ULO" de NULO.
+        strcpy(str, ""); // copia string vazia
+    } else if (R == '\"') {
+        if (scanf("%[^\"]", str) != 1) { // ler até o fechamento das aspas
+            strcpy(str, "");
+        }
+        getchar();         // ignorar aspas fechando
+	} else if (R != EOF) { 
+        int i = 0;
+        str[i++] = R;
+        // Lê caractere por caractere até encontrar um delimitador (espaço, tab, newline ou aspas)
+        while ((R = getchar()) != EOF && !isspace(R) && R != '\"') {
+            str[i++] = R;
+        }
+        str[i] = '\0';
+        
+        // Se parou por causa de uma aspa, devolve ela para o buffer (ungetc) 
+        // para que a próxima chamada trate como início de string se necessário
+        if (R == '\"') ungetc(R, stdin);
+    }
+}
 
 // Função auxiliar para processar strings
 // Lê uma string campo e a duplica na memória, e coloca o endereço dessa cópia em uma variável fora do escopo cujo endereço foi passado
@@ -55,10 +87,15 @@ REG_DADOS_STRUCT* ler_linha_csv(char* linha){
       	exit(1);
     }
 
+<<<<<<< HEAD
     REG_DADOS_STRUCT* registro_lido = (REG_DADOS_STRUCT*) malloc (sizeof(REG_DADOS_STRUCT));
     registro_lido->nomeEstacao = NULL; registro_lido->nomeLinha = NULL; // inicializando ponteiros como nulo para liberar memória com segurança
     
     registro_lido->removido = 0; // Seguindo a lógica de registro ativo
+=======
+    REG_DADOS_STRUCT* registro_lido = (REG_DADOS_STRUCT*) malloc(sizeof(REG_DADOS_STRUCT));
+    registro_lido->removido = 0; // Seguindo a lógica de registro ativo
+>>>>>>> origin/CJos
     registro_lido->proximo = -1;
 
     char *campo;
@@ -153,6 +190,7 @@ void func_1(char* arquivoSaida, char* arquivoEntrada){ // a ordem dos argumentos
 
 	int nroEstacoes = 0;
 	int nroParesEstacao = 0;
+	int proxRNN = 0;
 	
 	unsigned char cabecalho[] = { // a variável cabecalho é o endereço de memória de uma sequência de bytes, especificados abaixo. Esses são valores iniciais para o registro de cabeçalho, que deverá ser atualizado quando terminarmos a leitura.
 		0x00,                   // status, inicializado como 0 pois o registro está inconsistente
@@ -177,7 +215,7 @@ void func_1(char* arquivoSaida, char* arquivoEntrada){ // a ordem dos argumentos
 	}
 	
 	while(fgets(linha, sizeof(linha), filestream_csv)){ // lê novas linhas até chegar ao fim do arquivo, quando fgets retorna NULL
-	
+
 		printf("DEBUG: LENDO REGISTRO DE DADOS\n");
 	
 		linha[strcspn(linha, "\r\n")] = '\0'; // faz a linha terminar em \0
@@ -186,6 +224,7 @@ void func_1(char* arquivoSaida, char* arquivoEntrada){ // a ordem dos argumentos
 		// ESCREVER O REGISTRO NO BINÁRIO
 
 		escreve_registro(registro_lido, filestream_bin);
+		proxRNN++;
 
 		free(registro_lido->nomeEstacao);
 		free(registro_lido->nomeLinha);
@@ -197,9 +236,12 @@ void func_1(char* arquivoSaida, char* arquivoEntrada){ // a ordem dos argumentos
 
 	// ATUALIZAR REGISTRO DE CABEÇALHO
 
-	fseek(filestream_bin, 0, SEEK_SET);
-	unsigned char status = 0x01;
-	fwrite(&status, 1, 1, filestream_bin); // marcando o campo de status do arquivo como consistente
+	unsigned char status = 0x01; // status consistente
+	fseek(filestream_bin, 0, SEEK_SET); // vai para o início do arquivo
+	fwrite(&status, 1, 1, filestream_bin); // escreve o status como consistente
+	fseek(filestream_bin, 4, SEEK_CUR); // pula o campo "topo"
+	fwrite(&proxRNN, 4, 1, filestream_bin); // escreve o valor do proxRNN no campo certo
+
 	
 	fseek(filestream_bin, 9, SEEK_SET);
 	fwrite(&nroEstacoes, 4, 1, filestream_bin);
@@ -250,7 +292,11 @@ void print_campo_string(FILE* filestream_bin) {
 
 void print_registro(FILE* filestream_bin){
     int codEstacao, codLinha, codProxEst, dist, codLinhaInteg, codEstInteg;
-    long pos_inicial = ftell(filestream_bin) - 1; // O primeiro byte já foi lido nesse ponto
+    unsigned char removido;
+    long pos_inicial = ftell(filestream_bin);
+
+    fread(&removido, 1, 1, filestream_bin);
+    if(removido == 1) return;
 
     // Pulamos o campo 'proximo' que não é impresso
     fseek(filestream_bin, 4, SEEK_CUR);
@@ -288,10 +334,8 @@ void print_registro(FILE* filestream_bin){
 
 void func_2(char* arquivoLeitura){
 
-	FILE* filestream_bin = NULL;
-
 	// ABRIR BIN EM MODO LEITURA
-	filestream_bin = fopen(arquivoLeitura, "rb"); // abre o arquivo bin em modo leitura
+	FILE* filestream_bin = fopen(arquivoLeitura, "rb"); // abre o arquivo bin em modo leitura
 	if(filestream_bin == NULL){ // se falhou
 		printf("Falha no processamento do arquivo.\n");
 		printf("DEBUG: ERRO AO ABRIR BIN\n");
@@ -321,6 +365,7 @@ void func_2(char* arquivoLeitura){
 		if(removido == 1){ // O registro foi removido, salta o registro ao invés de ler
 			fseek(filestream_bin, REG_DADOS_S - 1, SEEK_CUR);
 		}else{
+            fseek(filestream_bin, -1, SEEK_CUR);
 			print_registro(filestream_bin);
 			reg_existe = true;	
 		}
@@ -333,4 +378,279 @@ void func_2(char* arquivoLeitura){
 	fclose(filestream_bin);
 }
 
+// Func 5
 
+REG_DADOS_STRUCT* ler_input_reg(){
+
+	REG_DADOS_STRUCT* registro_lido = (REG_DADOS_STRUCT*)malloc(sizeof(REG_DADOS_STRUCT));
+    if(registro_lido == NULL) return NULL;
+
+    // Inicialização de campos de controle
+    registro_lido->removido = 0;
+    registro_lido->proximo = -1;
+
+    char buffer[100];
+
+    ScanQuoteString(buffer);
+    registro_lido->codEstacao = (strlen(buffer) == 0) ? -1 : atoi(buffer);
+
+    ScanQuoteString(buffer); 
+    processar_string(buffer, &registro_lido->tamNomeEstacao, &registro_lido->nomeEstacao);
+
+    // codLinha
+    ScanQuoteString(buffer);
+    registro_lido->codLinha = (strlen(buffer) == 0) ? -1 : atoi(buffer);
+
+    // nomeLinha
+    ScanQuoteString(buffer);
+    processar_string(buffer, &registro_lido->tamNomeLinha, &registro_lido->nomeLinha);
+
+    // codProxEstacao
+    ScanQuoteString(buffer);
+    registro_lido->codProxEstacao = (strlen(buffer) == 0) ? -1 : atoi(buffer);
+
+    // distProxEstacao
+    ScanQuoteString(buffer);
+    registro_lido->distProxEstacao = (strlen(buffer) == 0) ? -1 : atoi(buffer);
+
+    // codLinhaIntegra
+    ScanQuoteString(buffer);
+    registro_lido->codLinhaIntegra = (strlen(buffer) == 0) ? -1 : atoi(buffer);
+
+    // codEstIntegra
+    ScanQuoteString(buffer);
+    registro_lido->codEstIntegra = (strlen(buffer) == 0) ? -1 : atoi(buffer);
+
+    return registro_lido;
+}
+
+void func_5(char* arquivoBin, int n){
+    FILE* filestream_bin = fopen(arquivoBin, "rb+");
+    if(filestream_bin == NULL){
+        printf("Falha no processamento do arquivo.\n");
+        return;
+    }
+
+    // Marcar arquivo como inconsistente 0 no início da operação
+    unsigned char status_inconsistente = 0x00;
+    fseek(filestream_bin, 0, SEEK_SET);
+    fwrite(&status_inconsistente, 1, 1, filestream_bin);
+
+    int topo, proxRRN;
+    // Ler o topo da pilha de removidos
+    fseek(filestream_bin, 1, SEEK_SET);
+    fread(&topo, 4, 1, filestream_bin);
+    // Ler o próximo RRN disponível para o fim do arquivo
+    fread(&proxRRN, 4, 1, filestream_bin);
+
+    for(int i = 0; i < n; i++){
+        REG_DADOS_STRUCT* registro_lido = ler_input_reg();
+
+        if(topo != -1){
+            // Reutilização do espaço na pilha de removidos
+            long offset = (long)topo * REG_DADOS_S + HEADER_S;
+            fseek(filestream_bin, offset + 1, SEEK_SET); // Pula o byte 'removido' para ler o próximo da pilha
+            
+            int proximo_na_pilha;
+            fread(&proximo_na_pilha, 4, 1, filestream_bin);
+
+            // Volta para o início do registro para escrever os novos dados
+            fseek(filestream_bin, offset, SEEK_SET);
+            escreve_registro(registro_lido, filestream_bin);
+
+            // Atualiza o topo da pilha
+            topo = proximo_na_pilha;
+        }else{
+            // Usa o proxRRN para inserir no fim
+            long offset = (long)proxRRN * REG_DADOS_S + HEADER_S;
+            fseek(filestream_bin, offset, SEEK_SET);
+            escreve_registro(registro_lido, filestream_bin);
+            
+            proxRRN++; // Incrementa o contador de registros do arquivo
+        }
+
+        // Limpeza de memória do registro lido
+        if(registro_lido->nomeEstacao) free(registro_lido->nomeEstacao);
+        if(registro_lido->nomeLinha) free(registro_lido->nomeLinha);
+        free(registro_lido);
+    }
+
+    // Atualizar o cabeçalho final
+    fseek(filestream_bin, 1, SEEK_SET);
+    fwrite(&topo, 4, 1, filestream_bin);    // Novo topo da pilha
+    fwrite(&proxRRN, 4, 1, filestream_bin); // Novo próximo RRN
+
+    // Marcar como consistente e fechar
+    unsigned char status_consistente = 1;
+    fseek(filestream_bin, 0, SEEK_SET);
+    fwrite(&status_consistente, 1, 1, filestream_bin);
+
+    fclose(filestream_bin);
+}
+
+
+// --------------------- FUNCAO 3 ----------------------
+
+// sistema de flags: declara uma flag como true, vai checando campo a campo, caso o campo esteja na pesquisa, realiza um and com a flag, se no final a flag for true, o registro é impresso
+    
+bool check_registro(REG_DADOS_STRUCT* busca, int mask, int RRN, FILE* bin){
+    fseek(bin, RRN * REG_DADOS_S + HEADER_S, SEEK_SET);
+    
+    unsigned char removido;
+    fread(&removido, 1, 1, bin);
+    if(removido == 1) return false; // Registro removido
+
+    // Pular o campo 'proximo'
+    fseek(bin, 4, SEEK_CUR);
+
+    // Ler todos os campos em ordem
+    int cEst, cLin, cProx, dist, cLinInt, cEstInt, tNomeE, tNomeL;
+    
+    fread(&cEst, 4, 1, bin);
+    fread(&cLin, 4, 1, bin);
+    fread(&cProx, 4, 1, bin);
+    fread(&dist, 4, 1, bin);
+    fread(&cLinInt, 4, 1, bin);
+    fread(&cEstInt, 4, 1, bin);
+
+    // Verificação de inteiros usando bitwise AND
+    if((mask & 1) && busca->codEstacao != cEst) return false;
+    if((mask & 2) && busca->codLinha != cLin) return false;
+    if((mask & 4) && busca->codProxEstacao != cProx) return false;
+    if((mask & 8) && busca->distProxEstacao != dist) return false;
+    if((mask & 16) && busca->codLinhaIntegra != cLinInt) return false;
+    if((mask & 32) && busca->codEstIntegra != cEstInt) return false;
+
+    // Verificação de Strings
+    // Nome Estação
+    fread(&tNomeE, 4, 1, bin);
+    if(mask & 64){
+        if(tNomeE > 0){
+            char temp[100];
+            fread(temp, 1, tNomeE, bin);
+            temp[tNomeE] = '\0';
+            // Se a busca não é nula e o arquivo tem dado, compara
+            if(busca->nomeEstacao != NULL){
+                if(strcmp(busca->nomeEstacao, temp) != 0) return false;
+            }else{
+                // Buscando por NULO mas encontrou dado no arquivo
+                return false;
+            }
+        }else{
+            // Campo no arquivo é NULO
+            if(busca->nomeEstacao != NULL) return false;
+        }
+    }else{
+        fseek(bin, tNomeE, SEEK_CUR);
+    }
+
+    // Nome Linha
+    fread(&tNomeL, 4, 1, bin);
+    if(mask & 128){
+        if(tNomeL > 0){
+            char temp[100];
+            fread(temp, 1, tNomeL, bin);
+            temp[tNomeL] = '\0';
+            // Se a busca não é nula e o arquivo tem dado, compara
+            if(busca->nomeLinha != NULL){
+                if(strcmp(busca->nomeLinha, temp) != 0) return false;
+            }else{
+                // Buscando por NULO mas encontrou dado no arquivo
+                return false;
+            }
+        }else{
+            // Campo no arquivo é NULO
+            if(busca->nomeLinha != NULL) return false;
+        }
+    }else{
+        fseek(bin, tNomeL, SEEK_CUR);
+    }
+    return true;
+}
+
+// lê e adiciona o campo lido ao registro chave de busca
+void ler_campos_busca(REG_DADOS_STRUCT* registro_busca, int* mask){
+
+    *mask = 0;
+    char nomeCampo[64], valorCampo[64];
+    int m;
+    scanf("%d", &m);
+
+    for(int i = 0; i < m; i++){
+
+        scanf("%s", nomeCampo);
+        ScanQuoteString(valorCampo);
+
+        if(strcmp(nomeCampo, "codEstacao") == 0){
+            registro_busca->codEstacao = (strlen(valorCampo) == 0) ? -1 : atoi(valorCampo);
+            *mask += 1;
+        }else if(strcmp(nomeCampo, "codLinha") == 0){
+            registro_busca->codLinha = (strlen(valorCampo) == 0) ? -1 : atoi(valorCampo);
+            *mask += 2;
+        }else if(strcmp(nomeCampo, "codProxEstacao") == 0){
+            registro_busca->codProxEstacao = (strlen(valorCampo) == 0) ? -1 : atoi(valorCampo);
+            *mask += 4;
+        }else if(strcmp(nomeCampo, "distProxEstacao") == 0){
+            registro_busca->distProxEstacao = (strlen(valorCampo) == 0) ? -1 : atoi(valorCampo);
+            *mask += 8;    
+        }else if(strcmp(nomeCampo, "codLinhaIntegra") == 0){
+            registro_busca->codLinhaIntegra = (strlen(valorCampo) == 0) ? -1 : atoi(valorCampo);
+            *mask += 16;
+        }else if(strcmp(nomeCampo, "codEstIntegra") == 0){
+            registro_busca->codEstIntegra = (strlen(valorCampo) == 0) ? -1 : atoi(valorCampo);
+            *mask += 32;
+        }else if(strcmp(nomeCampo, "nomeEstacao") == 0){
+            processar_string(valorCampo, &registro_busca->tamNomeEstacao, &registro_busca->nomeEstacao);
+            *mask += 64;
+        }else if(strcmp(nomeCampo, "nomeLinha") == 0){
+            processar_string(valorCampo, &registro_busca->tamNomeLinha, &registro_busca->nomeLinha);
+            *mask += 128;
+        }
+    }
+}
+
+
+
+void func_3(char* arquivoBin, int n){
+
+    FILE* filestream_bin = fopen(arquivoBin, "rb");
+    if(filestream_bin == NULL){
+        printf("Falha no processamento do arquivo.\n");
+        return;
+    }
+
+    // Cria um vetor com os registros chaves de busca, e tambem um vetor com um bit mask dos campos utilizados para busca
+    REG_DADOS_STRUCT* registros_de_busca = (REG_DADOS_STRUCT* )malloc(n*sizeof(REG_DADOS_STRUCT));
+    int* mask = (int* )malloc(n*sizeof(int));
+
+    for(int i = 0; i < n; i++){
+        ler_campos_busca(&registros_de_busca[i], &mask[i]);
+    }
+
+    int proxRRN;
+    fseek(filestream_bin, 5, SEEK_SET);
+    fread(&proxRRN, 4, 1, filestream_bin);
+    // Começar busca sequencial no arquivo a partir do RRN = 0 para cada uma das n buscas
+    for(int i = 0; i < n; i++){
+
+        bool flag_encontrou = false;
+
+        for(int RRN = 0; RRN < proxRRN; RRN++){
+            if(check_registro(&registros_de_busca[i], mask[i], RRN, filestream_bin)){
+                // Se o registro bate com a busca, posiciona e imprime
+                fseek(filestream_bin, RRN * REG_DADOS_S + HEADER_S, SEEK_SET);
+                print_registro(filestream_bin); 
+                flag_encontrou = true;
+            }
+        }
+
+        if(!flag_encontrou) printf("Registro inexistente.\n");
+        printf("\n");
+
+        if (mask[i] & 64) free(registros_de_busca[i].nomeEstacao);
+        if (mask[i] & 128) free(registros_de_busca[i].nomeLinha);
+    }
+
+    free(registros_de_busca);
+    free(mask);
+}
