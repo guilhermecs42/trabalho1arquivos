@@ -10,9 +10,9 @@
 
 #define LIXO 0x24 // O conteúdo de bytes não utilizados é 0x24, $ em ascii, apelidado de LIXO nesse código
 #define LIXO_INT 0x24242424 // Um campo de tipo inteiro não utilizado teria valor $$$$, ou 0x24242424, apelidado de LIXO_INT nesse código
-typedef struct reg_dados_struct REG_DADOS_STRUCT; // Representação do registro de dados na memória para ajudar na organização do código. Não é a mesma estrutura byte a byte.
+typedef struct reg_dados_struct REG_DADOS_STRUCT; // Essa struct é uma representação do registro de dados na memória. Não é exatamente a mesma estrutura, pois as strings foram substituídas por ponteiros, e elas terminam em \0, diferentemente da versão em disco. Além disso, o alocador de memória coloca um padding que não existe no registro em disco.
 
-struct reg_dados_struct { // ESSE STRUCT SERVE APENAS PARA ORGANIZAR O CÓDIGO E ELE NÃO É ESCRITO DIRETAMENTE NO ARQUIVO!
+struct reg_dados_struct {
 	unsigned char removido;
 	int proximo;
 	int codEstacao;
@@ -43,28 +43,23 @@ void processar_string(char* campo, int* tam, char** destino){
 // Lê uma string e retorna o número correspondente. Se for nula ou sem comprimento, retorna erro.
 int processar_int(char* campo){
     if(campo == NULL || strlen(campo) == 0){
-        return LIXO_INT;
+        return -1;
     }
     return atoi(campo);
 }
 
 // Essa função recebe uma linha do arquivo csv e retorna um struct REG_DADOS_STRUCT contendo as informações naquela linha
 REG_DADOS_STRUCT* ler_linha_csv(char* linha){
-    if(linha == NULL){
-    	printf("Falha no processamento: linha nula.\n");
-      	exit(1);
-    }
+    if(linha == NULL) return NULL;
 
     REG_DADOS_STRUCT* registro_lido = (REG_DADOS_STRUCT*) malloc (sizeof(REG_DADOS_STRUCT));
-    registro_lido->nomeEstacao = NULL; registro_lido->nomeLinha = NULL; // inicializando ponteiros como nulo para liberar memória com segurança
-    
     registro_lido->removido = 0; // Seguindo a lógica de registro ativo
     registro_lido->proximo = -1;
 
     char *campo;
     char *ptr = linha; // strsep modifica o ponteiro, usamos um auxiliar
 
-    for(int i = 0; i < 8; i++){ // ler 8 campos da memória:
+    for(int i = 0; i < 8; i++){
         // strsep extrai o texto até a próxima vírgula e coloca \0 no lugar dela
         campo = strsep(&ptr, ",");
 
@@ -107,13 +102,14 @@ void escreve_registro(REG_DADOS_STRUCT* registro_lido, FILE* filestream_bin){
 	fwrite(&(registro_lido->distProxEstacao), 1, 4, filestream_bin);
 	fwrite(&(registro_lido->codLinhaIntegra), 1, 4, filestream_bin);
 	fwrite(&(registro_lido->codEstIntegra), 1, 4, filestream_bin);
+	fwrite(&(registro_lido->tamNomeEstacao), 1, 4, filestream_bin);
 
-	fwrite(&(registro_lido->tamNomeEstacao), 1, 4, filestream_bin); // armazena o tamanho do nome da estação
 	if(registro_lido->tamNomeEstacao != 0){
-		fwrite(registro_lido->nomeEstacao, 1, registro_lido->tamNomeEstacao, filestream_bin); // como tamNomeEstacao foi inicializado por strlen, o \0 no final não será escrito
+		fwrite(registro_lido->nomeEstacao, 1, registro_lido->tamNomeEstacao, filestream_bin);
 	}
 
 	fwrite(&(registro_lido->tamNomeLinha), 1, 4, filestream_bin); // armazena o tamanho do nome da linha
+
 	if(registro_lido->tamNomeLinha != 0){
 		fwrite(registro_lido->nomeLinha, 1, registro_lido->tamNomeLinha, filestream_bin); // como tamNomeLinha foi inicializado por strlen, o \0 no final não será escrito
 	}
@@ -150,16 +146,13 @@ void func_1(char* arquivoSaida, char* arquivoEntrada){ // a ordem dos argumentos
 	printf("DEBUG: ARQUIVOS ABERTOS COM SUCESSO\n");
 	
 	// ESCREVER REGISTRO DE CABEÇALHO
-
-	int nroEstacoes = 0;
-	int nroParesEstacao = 0;
 	
 	unsigned char cabecalho[] = { // a variável cabecalho é o endereço de memória de uma sequência de bytes, especificados abaixo. Esses são valores iniciais para o registro de cabeçalho, que deverá ser atualizado quando terminarmos a leitura.
-		0x00,                   // status, inicializado como 0 pois o registro está inconsistente
+		0x00,                   // status 
 		0xff, 0xff, 0xff, 0xff, // topo
 		0x00, 0x00, 0x00, 0x00, // proxRRN
-		LIXO, LIXO, LIXO, LIXO, // nroEstacoes, será atualizado depois
-		LIXO, LIXO, LIXO, LIXO  // nroParesEstacao, será atualizado depois
+		0x24, 0x24, 0x24, 0x24, // nroEstacoes, será atualizado depois
+		0x24, 0x24, 0x24, 0x24  // nroParesEstacao 
 	};
 	
 	fwrite(cabecalho, 1, sizeof(cabecalho), filestream_bin);
@@ -176,7 +169,7 @@ void func_1(char* arquivoSaida, char* arquivoEntrada){ // a ordem dos argumentos
 		goto fechar;
 	}
 	
-	while(fgets(linha, sizeof(linha), filestream_csv)){ // lê novas linhas até chegar ao fim do arquivo, quando fgets retorna NULL
+	while(fgets(linha, sizeof(linha), filestream_csv)){
 	
 		printf("DEBUG: LENDO REGISTRO DE DADOS\n");
 	
@@ -195,16 +188,10 @@ void func_1(char* arquivoSaida, char* arquivoEntrada){ // a ordem dos argumentos
 		printf("DEBUG: REGISTRO DE DADOS ESCRITO COM SUCESSO\n");
 	}
 
-	// ATUALIZAR REGISTRO DE CABEÇALHO
-
 	fseek(filestream_bin, 0, SEEK_SET);
 	unsigned char status = 0x01;
-	fwrite(&status, 1, 1, filestream_bin); // marcando o campo de status do arquivo como consistente
+	fwrite(&status, 1, 1, filestream_bin);
 	
-	fseek(filestream_bin, 9, SEEK_SET);
-	fwrite(&nroEstacoes, 4, 1, filestream_bin);
-	fwrite(&nroParesEstacao, 4, 1, filestream_bin);
-
 	// FECHAR ARQUIVOS
 	
 	fechar:
