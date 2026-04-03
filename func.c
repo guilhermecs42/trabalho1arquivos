@@ -27,7 +27,15 @@ struct reg_dados_struct {
 	int tamNomeLinha;
 	char* nomeLinha; // ponteiro para uma string de tamanho tamNomeLinha + 1, terminada em \0
 };
-void ScanQuoteString(char *str) { // gemini corrigiu essa função para ler os inteiros
+//
+//
+//
+//
+
+
+// -----------------------FUNCOES AUXILIARES --------------------------- //
+
+void ScanQuoteString(char *str) { // função fornecida alterada para também tratar inteiros de forma correta
     char R;
 
     while ((R = getchar()) != EOF && isspace(R))
@@ -151,126 +159,25 @@ void escreve_registro(REG_DADOS_STRUCT* registro_lido, FILE* filestream_bin){
 
 }
 
-void func_1(char* arquivoSaida, char* arquivoEntrada){ // a ordem dos argumentos é o contrário da ordem digitada pelo usuário, devido à ordem de empilhamento dos argumentos na memória, lembrando que cada argumento é o retorno de uma chamada de strtok
-	
-	FILE* filestream_csv = NULL;
-	FILE* filestream_bin = NULL;
-	
-	// ABRIR CSV EM MODO LEITURA
-	filestream_csv = fopen(arquivoEntrada, "r"); // abre o arquivo csv em modo leitura e como texto
-	if(filestream_csv == NULL){ // se falhou
-		printf("Falha no processamento do arquivo.\n");
-		printf("DEBUG: ERRO AO ABRIR CSV\n");
-		goto fechar;
-	}
-	
-	// CRIAR ARQUIVO BINÁRIO EM MODO ESCRITA
-	filestream_bin = fopen(arquivoSaida, "wb"); // abre o arquivo de saída em modo escrita e como binário
-	if(filestream_bin == NULL){ // se falhou
-		printf("Falha no processamento do arquivo.\n");
-		printf("DEBUG: ERRO AO ABRIR BIN\n");
-		goto fechar;
-	}
-	
-	printf("DEBUG: ARQUIVOS ABERTOS COM SUCESSO\n");
-	
-	// ESCREVER REGISTRO DE CABEÇALHO
-	
-	unsigned char cabecalho[] = { // a variável cabecalho é o endereço de memória de uma sequência de bytes, especificados abaixo. Esses são valores iniciais para o registro de cabeçalho, que deverá ser atualizado quando terminarmos a leitura.
-		0x00,                   // status 
-		0xff, 0xff, 0xff, 0xff, // topo
-		0x00, 0x00, 0x00, 0x00, // proxRRN
-		0x24, 0x24, 0x24, 0x24, // nroEstacoes, será atualizado depois
-		0x24, 0x24, 0x24, 0x24  // nroParesEstacao 
-	};
-	
-	fwrite(cabecalho, 1, sizeof(cabecalho), filestream_bin);
-	
-	// ESCREVER REGISTRO DE DADOS
-	
-	char linha[103]; // uma linha do arquivo csv. O cabeçalho tem caracteres, mais \n, mais \0
-	fgets(linha, 103, filestream_csv);
-	linha[strcspn(linha, "\r\n")] = '\0'; // faz a linha terminar em \0
-	 
-	if(strcmp(linha, "CodEstacao,NomeEstacao,CodLinha,NomeLinha,CodProxEst,DistanciaProxEst,CodLinhaInteg,CodEstacaoInteg") != 0){
-		printf("Falha no processamento do arquivo.\n");
-		printf("DEBUG: PRIMEIRA LINHA NÃO CORRESPONDE AO ESPERADO\n");
-		goto fechar;
-	}
-	
-	int proxRNN = 0;
-
-	while(fgets(linha, sizeof(linha), filestream_csv)){
-	
-		printf("DEBUG: LENDO REGISTRO DE DADOS\n");
-	
-		linha[strcspn(linha, "\r\n")] = '\0'; // faz a linha terminar em \0
-		REG_DADOS_STRUCT* registro_lido = ler_linha_csv(linha);
-		
-		// ESCREVER O REGISTRO NO BINÁRIO
-
-		escreve_registro(registro_lido, filestream_bin);
-		proxRNN++;
-
-		free(registro_lido->nomeEstacao);
-		free(registro_lido->nomeLinha);
-		free(registro_lido);
-
-		
-		printf("DEBUG: REGISTRO DE DADOS ESCRITO COM SUCESSO\n");
-	}
-
-	unsigned char status = 0x01;
-	fseek(filestream_bin, 0, SEEK_SET);
-	fwrite(&status, 1, 1, filestream_bin);
-	fseek(filestream_bin, 4, SEEK_CUR);
-	fwrite(&proxRNN, 4, 1, filestream_bin);
-	
-	// FECHAR ARQUIVOS
-	
-	fechar:
-	
-	if(filestream_csv != NULL){
-		if(fclose(filestream_csv) != 0){
-			printf("Falha no processamento do arquivo.\n");
-			printf("DEBUG: ERRO AO FECHAR CSV\n");
-			exit(1);
-		}
-	}
-	
-	if(filestream_bin != NULL){
-		if(fclose(filestream_bin) != 0){
-			printf("Falha no processamento do arquivo.\n");
-			printf("DEBUG: ERRO AO FECHAR BIN\n");
-			exit(1);
-		}
-	}
-	
-	return;
-}
-
-// Func 2
-
 void print_campo_string(FILE* filestream_bin) {
     int tam;
     // Lê o indicador de tamanho
     if(fread(&tam, 4, 1, filestream_bin) != 1) return;
 
-    if(tam > 0){
+    if(tam > 0){ // Se o tamanho do campo for maior que 0, o campo string não é NULO
         char *temp = (char* )malloc(tam + 1);
         if(temp){
             fread(temp, 1, tam, filestream_bin);
-            temp[tam] = '\0';
+            temp[tam] = '\0'; // adiciona o '/0' no final da string para utilizar o 'printf'
             printf("%s ", temp);
             free(temp);
         }
-    }else{
+    }else{ // Se o tamanho da string for 0, deve-se printar "NULO" ao invês de pular o campo
         printf("NULO ");
     }
 }
 
 void print_registro(FILE* filestream_bin){
-    int codEstacao, codLinha, codProxEst, dist, codLinhaInteg, codEstInteg;
     unsigned char removido;
     long pos_inicial = ftell(filestream_bin);
 
@@ -280,25 +187,22 @@ void print_registro(FILE* filestream_bin){
     // Pulamos o campo 'proximo' que não é impresso
     fseek(filestream_bin, 4, SEEK_CUR);
 
-    fread(&codEstacao, 4, 1, filestream_bin);
-    fread(&codLinha, 4, 1, filestream_bin);
-
-    // Demais campos inteiros
-    int campos[4]; // proxEst, dist, linhaInteg, estInteg
+    // Lê os campos de inteiros
+    int campos[6]; // 0-codEstacao, 1-codLinha, 2-codProxEstacao, 3-distProxEstacao, 4-codLinhaIntegra, 5-codEstIntegra
     fread(campos, 4, 4, filestream_bin);
 
-    printf("%d ", codEstacao);
+    printf("%d ", campos[0]);
 
     // Nome estação
     print_campo_string(filestream_bin);
 
-    printf("%d ", codLinha);
+    printf("%d ", campos[1]);
 
     // Nome linha
     print_campo_string(filestream_bin);
     
 	// Printa os demais campos inteiros
-    for(int i = 0; i < 4; i++){
+    for(int i = 2; i < 6; i++){
         if(campos[i] != -1){
 			printf("%d ", campos[i]);
 		}else{
@@ -311,54 +215,6 @@ void print_registro(FILE* filestream_bin){
     fseek(filestream_bin, pos_inicial + REG_DADOS_S, SEEK_SET);
 }
 
-void func_2(char* arquivoLeitura){
-
-	// ABRIR BIN EM MODO LEITURA
-	FILE* filestream_bin = fopen(arquivoLeitura, "rb"); // abre o arquivo bin em modo leitura
-	if(filestream_bin == NULL){ // se falhou
-		printf("Falha no processamento do arquivo.\n");
-		printf("DEBUG: ERRO AO ABRIR BIN\n");
-		return;
-	}
-
-	printf("DEBUG: ARQUIVO ABERTO COM SUCESSO\n");
-
-	unsigned char status;
-
-	// Lê o status do cabeçalho do arquivo
-
-	fread(&status, 1, 1, filestream_bin);
-	if(status != 1){
-		printf("Falha no processamento do arquivo.\n");
-		printf("DEBUG: REGISTRO INCONSISTENTE\n");
-		fclose(filestream_bin);
-		return;
-	}
-
-	fseek(filestream_bin, HEADER_S, SEEK_SET);
-
-	unsigned char removido;
-	bool reg_existe = false;
-
-	while(fread(&removido, 1, 1, filestream_bin) == 1){
-		if(removido == 1){ // O registro foi removido, salta o registro ao invés de ler
-			fseek(filestream_bin, REG_DADOS_S - 1, SEEK_CUR);
-		}else{
-            fseek(filestream_bin, -1, SEEK_CUR);
-			print_registro(filestream_bin);
-			reg_existe = true;	
-		}
-	}
-
-    if (!reg_existe) {
-        printf("Registro inexistente.\n");
-    }
-
-	fclose(filestream_bin);
-}
-
-// Func 5
-
 REG_DADOS_STRUCT* ler_input_reg(){
 
 	REG_DADOS_STRUCT* registro_lido = (REG_DADOS_STRUCT*)malloc(sizeof(REG_DADOS_STRUCT));
@@ -370,9 +226,13 @@ REG_DADOS_STRUCT* ler_input_reg(){
 
     char buffer[100];
 
+    // Lê os campos de input, tanto inteiros quanto strings, utilizando a função scanQuoteString, e os salva num registro
+
+    // codEstacao
     ScanQuoteString(buffer);
     registro_lido->codEstacao = (strlen(buffer) == 0) ? -1 : atoi(buffer);
 
+    // nomeEstacao
     ScanQuoteString(buffer); 
     processar_string(buffer, &registro_lido->tamNomeEstacao, &registro_lido->nomeEstacao);
 
@@ -403,75 +263,6 @@ REG_DADOS_STRUCT* ler_input_reg(){
     return registro_lido;
 }
 
-void func_5(char* arquivoBin, int n){
-    FILE* filestream_bin = fopen(arquivoBin, "rb+");
-    if(filestream_bin == NULL){
-        printf("Falha no processamento do arquivo.\n");
-        return;
-    }
-
-    // Marcar arquivo como inconsistente 0 no início da operação
-    unsigned char status_inconsistente = 0x00;
-    fseek(filestream_bin, 0, SEEK_SET);
-    fwrite(&status_inconsistente, 1, 1, filestream_bin);
-
-    int topo, proxRRN;
-    // Ler o topo da pilha de removidos
-    fseek(filestream_bin, 1, SEEK_SET);
-    fread(&topo, 4, 1, filestream_bin);
-    // Ler o próximo RRN disponível para o fim do arquivo
-    fread(&proxRRN, 4, 1, filestream_bin);
-
-    for(int i = 0; i < n; i++){
-        REG_DADOS_STRUCT* registro_lido = ler_input_reg();
-
-        if(topo != -1){
-            // Reutilização do espaço na pilha de removidos
-            long offset = (long)topo * REG_DADOS_S + HEADER_S;
-            fseek(filestream_bin, offset + 1, SEEK_SET); // Pula o byte 'removido' para ler o próximo da pilha
-            
-            int proximo_na_pilha;
-            fread(&proximo_na_pilha, 4, 1, filestream_bin);
-
-            // Volta para o início do registro para escrever os novos dados
-            fseek(filestream_bin, offset, SEEK_SET);
-            escreve_registro(registro_lido, filestream_bin);
-
-            // Atualiza o topo da pilha
-            topo = proximo_na_pilha;
-        }else{
-            // Usa o proxRRN para inserir no fim
-            long offset = (long)proxRRN * REG_DADOS_S + HEADER_S;
-            fseek(filestream_bin, offset, SEEK_SET);
-            escreve_registro(registro_lido, filestream_bin);
-            
-            proxRRN++; // Incrementa o contador de registros do arquivo
-        }
-
-        // Limpeza de memória do registro lido
-        if(registro_lido->nomeEstacao) free(registro_lido->nomeEstacao);
-        if(registro_lido->nomeLinha) free(registro_lido->nomeLinha);
-        free(registro_lido);
-    }
-
-    // Atualizar o cabeçalho final
-    fseek(filestream_bin, 1, SEEK_SET);
-    fwrite(&topo, 4, 1, filestream_bin);    // Novo topo da pilha
-    fwrite(&proxRRN, 4, 1, filestream_bin); // Novo próximo RRN
-
-    // Marcar como consistente e fechar
-    unsigned char status_consistente = 1;
-    fseek(filestream_bin, 0, SEEK_SET);
-    fwrite(&status_consistente, 1, 1, filestream_bin);
-
-    fclose(filestream_bin);
-}
-
-
-// --------------------- FUNCAO 3 ----------------------
-
-// sistema de flags: declara uma flag como true, vai checando campo a campo, caso o campo esteja na pesquisa, realiza um and com a flag, se no final a flag for true, o registro é impresso
-    
 bool check_registro(REG_DADOS_STRUCT* busca, int mask, int RRN, FILE* bin){
     fseek(bin, RRN * REG_DADOS_S + HEADER_S, SEEK_SET);
     
@@ -587,30 +378,198 @@ void ler_campos_busca(REG_DADOS_STRUCT* registro_busca, int* mask){
         }
     }
 }
+//
+//
+//
+//
 
+// -----------------------FUNCOES PRINCIPAIS --------------------------- //
 
+/**
+ * @brief Funcionalidade 1: Importa registros de um arquivo CSV para um arquivo binário.
+ * Simula o comando SQL 'CREATE TABLE'. Lê os dados de um arquivo .csv de entrada e os 
+ * armazena em um arquivo binário estruturado com registro de cabeçalho e registros 
+ * de dados de tamanho fixo (80 bytes).
+ * @param arquivoSaida Nome do arquivo binário (.bin) a ser gerado.
+ * @param arquivoEntrada Nome do arquivo de texto (.csv) contendo os dados originais.
+ * @return void
+ */
+void func_1(char* arquivoSaida, char* arquivoEntrada){ 
+	
+	FILE* filestream_csv = NULL;
+	FILE* filestream_bin = NULL;
+	
+	// ABRIR CSV EM MODO LEITURA
+	filestream_csv = fopen(arquivoEntrada, "r"); // abre o arquivo csv em modo leitura e como texto
+	if(filestream_csv == NULL){ // se falhou
+		printf("Falha no processamento do arquivo.\n");
+		printf("DEBUG: ERRO AO ABRIR CSV\n");
+		goto fechar;
+	}
+	
+	// CRIAR ARQUIVO BINÁRIO EM MODO ESCRITA
+	filestream_bin = fopen(arquivoSaida, "wb"); // abre o arquivo de saída em modo escrita e como binário
+	if(filestream_bin == NULL){ // se falhou
+		printf("Falha no processamento do arquivo.\n");
+		printf("DEBUG: ERRO AO ABRIR BIN\n");
+		goto fechar;
+	}
+	
+	printf("DEBUG: ARQUIVOS ABERTOS COM SUCESSO\n");
+	
+	// ESCREVER REGISTRO DE CABEÇALHO
+	
+	unsigned char cabecalho[] = { // a variável cabecalho é o endereço de memória de uma sequência de bytes, especificados abaixo. Esses são valores iniciais para o registro de cabeçalho, que deverá ser atualizado quando terminarmos a leitura.
+		0x00,                   // status 
+		0xff, 0xff, 0xff, 0xff, // topo
+		0x00, 0x00, 0x00, 0x00, // proxRRN
+		0x24, 0x24, 0x24, 0x24, // nroEstacoes, será atualizado depois
+		0x24, 0x24, 0x24, 0x24  // nroParesEstacao 
+	};
+	
+	fwrite(cabecalho, 1, sizeof(cabecalho), filestream_bin);
+	
+	// ESCREVER REGISTRO DE DADOS
+	
+	char linha[103]; // uma linha do arquivo csv. O cabeçalho tem caracteres, mais \n, mais \0
+	fgets(linha, 103, filestream_csv);
+	linha[strcspn(linha, "\r\n")] = '\0'; // faz a linha terminar em \0
+	 
+	if(strcmp(linha, "CodEstacao,NomeEstacao,CodLinha,NomeLinha,CodProxEst,DistanciaProxEst,CodLinhaInteg,CodEstacaoInteg") != 0){
+		printf("Falha no processamento do arquivo.\n");
+		printf("DEBUG: PRIMEIRA LINHA NÃO CORRESPONDE AO ESPERADO\n");
+		goto fechar;
+	}
+	
+	int proxRNN = 0;
 
+	while(fgets(linha, sizeof(linha), filestream_csv)){
+	
+		printf("DEBUG: LENDO REGISTRO DE DADOS\n");
+	
+		linha[strcspn(linha, "\r\n")] = '\0'; // faz a linha terminar em \0
+		REG_DADOS_STRUCT* registro_lido = ler_linha_csv(linha);
+		
+		// ESCREVER O REGISTRO NO BINÁRIO
+
+		escreve_registro(registro_lido, filestream_bin);
+		proxRNN++;
+
+		free(registro_lido->nomeEstacao);
+		free(registro_lido->nomeLinha);
+		free(registro_lido);
+
+		
+		printf("DEBUG: REGISTRO DE DADOS ESCRITO COM SUCESSO\n");
+	}
+
+	unsigned char status = 0x01;
+	fseek(filestream_bin, 0, SEEK_SET);
+	fwrite(&status, 1, 1, filestream_bin);
+	fseek(filestream_bin, 4, SEEK_CUR);
+	fwrite(&proxRNN, 4, 1, filestream_bin);
+	
+	// FECHAR ARQUIVOS
+	
+	fechar:
+	
+	if(filestream_csv != NULL){
+		if(fclose(filestream_csv) != 0){
+			printf("Falha no processamento do arquivo.\n");
+			printf("DEBUG: ERRO AO FECHAR CSV\n");
+			exit(1);
+		}
+	}
+	
+	if(filestream_bin != NULL){
+		if(fclose(filestream_bin) != 0){
+			printf("Falha no processamento do arquivo.\n");
+			printf("DEBUG: ERRO AO FECHAR BIN\n");
+			exit(1);
+		}
+	}
+	
+	return;
+}
+
+/**
+ * @brief Funcionalidade [2]: Recupera e exibe todos os registros do arquivo binário.
+ * Simula o comando SQL 'SELECT FROM'. Percorre sequencialmente o arquivo binário 
+ * e imprime todos os registros que não estão marcados como logicamente removidos. 
+ * Campos nulos são exibidos como 'NULO'.
+ * @param arquivoLeitura Nome do arquivo binário de onde os dados serão lidos.
+ * @return void
+ */
+void func_2(char* arquivoLeitura){
+
+	// abre o arquivo bin em modo leitura
+	FILE* filestream_bin = fopen(arquivoLeitura, "rb");
+	if(filestream_bin == NULL){ // se falhou
+		printf("Falha no processamento do arquivo.\n");
+		return;
+	}
+
+	// Lê o status do cabeçalho do arquivo
+	unsigned char status;
+	fread(&status, 1, 1, filestream_bin);
+	if(status != 1){
+		printf("Falha no processamento do arquivo.\n");
+		fclose(filestream_bin);
+		return;
+	}
+
+	fseek(filestream_bin, HEADER_S, SEEK_SET);
+
+	unsigned char removido;
+	bool reg_existe = false;
+
+	while(fread(&removido, 1, 1, filestream_bin) == 1){
+		if(removido == 1){ // O registro foi removido, salta o registro ao invés de ler
+			fseek(filestream_bin, REG_DADOS_S - 1, SEEK_CUR);
+		}else{
+            fseek(filestream_bin, -1, SEEK_CUR);
+			print_registro(filestream_bin);
+			reg_existe = true;	
+		}
+	}
+
+    if (!reg_existe) {
+        printf("Registro inexistente.\n");
+    }
+
+	fclose(filestream_bin);
+}
+
+/**
+ * @brief Funcionalidade [3]: Recupera registros com base em critérios de busca.
+ * Simula o comando SQL 'SELECT WHERE'. Permite a busca por um ou mais campos 
+ * (inteiros ou strings). Realiza uma busca sequencial no arquivo e exibe todos 
+ * os registros que satisfazem os filtros informados.
+ * @param arquivoBin Nome do arquivo binário para consulta.
+ * @param n Quantidade de buscas independentes a serem realizadas.
+ * @return void
+ */
 void func_3(char* arquivoBin, int n){
 
+    // abre o arquivo binário em modo leitura
     FILE* filestream_bin = fopen(arquivoBin, "rb");
     if(filestream_bin == NULL){
         printf("Falha no processamento do arquivo.\n");
         return;
     }
 
-    // Cria um vetor com os registros chaves de busca, e tambem um vetor com um bit mask dos campos utilizados para busca
-    REG_DADOS_STRUCT* registros_de_busca = (REG_DADOS_STRUCT* )malloc(n*sizeof(REG_DADOS_STRUCT));
-    int* mask = (int* )malloc(n*sizeof(int));
+    REG_DADOS_STRUCT* registros_de_busca = (REG_DADOS_STRUCT* )malloc(n*sizeof(REG_DADOS_STRUCT));   // Cria um vetor com os registros chaves para busca, 
+    int* mask = (int* )malloc(n*sizeof(int));                                                        // e tambem um vetor com um bit mask dos campos utilizados para busca
 
-    for(int i = 0; i < n; i++){
+    for(int i = 0; i < n; i++){ // lê as n entradas de argumentos para buscas
         ler_campos_busca(&registros_de_busca[i], &mask[i]);
     }
 
     int proxRRN;
     fseek(filestream_bin, 5, SEEK_SET);
     fread(&proxRRN, 4, 1, filestream_bin);
-    // Começar busca sequencial no arquivo a partir do RRN = 0 para cada uma das n buscas
-    for(int i = 0; i < n; i++){
+
+    for(int i = 0; i < n; i++){     // Começa uma busca sequencial no arquivo a partir do RRN = 0 para cada uma das n buscas
 
         bool flag_encontrou = false;
 
@@ -626,10 +585,148 @@ void func_3(char* arquivoBin, int n){
         if(!flag_encontrou) printf("Registro inexistente.\n");
         printf("\n");
 
-        if (mask[i] & 64) free(registros_de_busca[i].nomeEstacao);
-        if (mask[i] & 128) free(registros_de_busca[i].nomeLinha);
+        if(mask[i] & 64) free(registros_de_busca[i].nomeEstacao);
+        if(mask[i] & 128) free(registros_de_busca[i].nomeLinha);
     }
 
     free(registros_de_busca);
     free(mask);
+}
+/**
+ * @brief Funcionalidade [4]: Realiza a remoção lógica de registros.
+ * Simula o comando SQL 'DELETE FROM WHERE'. Localiza registros através de filtros 
+ * e os marca como removidos ('1'). Implementa uma lista encadeada (pilha) de espaços 
+ * disponíveis, utilizando o campo 'topo' no cabeçalho para permitir reaproveitamento futuro.
+ * @param arquivoBin Nome do arquivo binário onde ocorrerão as remoções.
+ * @param n Quantidade de operações de remoção a serem processadas.
+ * @return void
+ */
+void func_4(char* arquivoBin, int n){
+
+    // abre o arquivo binério em modo de leitura e escrita
+    FILE* filestream_bin = fopen(arquivoBin, "rb+");
+    if(filestream_bin == NULL){
+        printf("Falha no processamento do arquivo.\n");
+        return;
+    }
+
+    // Marca arquivo como inconsistente no início da operação
+    unsigned char status_inconsistente = 0x00;
+    fseek(filestream_bin, 0, SEEK_SET);
+    fwrite(&status_inconsistente, 1, 1, filestream_bin);
+
+    REG_DADOS_STRUCT* registros_de_busca = (REG_DADOS_STRUCT* )malloc(n*sizeof(REG_DADOS_STRUCT));   // Cria um vetor com os registros chaves para busca dos registros a serem excluídos, 
+    int* mask = (int* )malloc(n*sizeof(int));                                                        // e tambem um vetor com um bit mask dos campos utilizados para busca
+
+    for(int i = 0; i < n; i++){  // lê as n entradas de argumentos para buscas
+        ler_campos_busca(&registros_de_busca[i], &mask[i]);
+    }
+
+    int proxRRN, topoPilha;
+    unsigned char removido = '1';
+
+    fseek(filestream_bin, 1, SEEK_SET);
+    fread(&topoPilha, 4, 1, filestream_bin);
+    fread(&proxRRN, 4, 1, filestream_bin);
+
+    for(int i = 0; i < n; i++){     // Começa uma busca sequencial no arquivo a partir do RRN = 0 para cada uma das n buscas
+
+        for(int RRN = 0; RRN < proxRRN; RRN++){
+            if(check_registro(&registros_de_busca[i], mask[i], RRN, filestream_bin)){
+                // Se o registro bate com a busca, marca como removido e atualiza o campo 'proximo' para receber o topo da pilha
+                fseek(filestream_bin, RRN * REG_DADOS_S + HEADER_S, SEEK_SET);
+                fwrite(&removido, 1, 1, filestream_bin);
+                fwrite(&topoPilha, 4, 1, filestream_bin);
+                topoPilha = RRN; // atualiza o topo da pilha para o registro atual
+            }
+        }
+
+        if (mask[i] & 64) free(registros_de_busca[i].nomeEstacao);
+        if (mask[i] & 128) free(registros_de_busca[i].nomeLinha);
+    }
+
+    fseek(filestream_bin, 1, SEEK_SET);
+    fwrite(&topoPilha, 4, 1, filestream_bin); // O topo da pilha no cabeçalho recebe o RRN do último registro a ser removido
+
+    free(registros_de_busca);
+    free(mask);
+
+    // Marca como consistente e fecha o arquivo
+    unsigned char status_consistente = 1;
+    fseek(filestream_bin, 0, SEEK_SET);
+    fwrite(&status_consistente, 1, 1, filestream_bin);
+
+    fclose(filestream_bin);
+}
+/**
+ * @brief Funcionalidade [5]: Insere novos registros reaproveitando espaços removidos.
+ * Simula o comando SQL 'INSERT INTO'. Tenta inserir o novo registro no RRN indicado 
+ * pelo 'topo' da pilha de removidos. Caso a pilha esteja vazia (topo == -1), a inserção 
+ * ocorre no final do arquivo (proxRRN).
+ * @param arquivoBin Nome do arquivo binário para inserção.
+ * @param n Quantidade de novos registros a serem inseridos.
+ * @return void
+ */
+void func_5(char* arquivoBin, int n){
+    FILE* filestream_bin = fopen(arquivoBin, "rb+");
+    if(filestream_bin == NULL){
+        printf("Falha no processamento do arquivo.\n");
+        return;
+    }
+
+    // Marca arquivo como inconsistente no início da operação
+    unsigned char status_inconsistente = 0x00;
+    fseek(filestream_bin, 0, SEEK_SET);
+    fwrite(&status_inconsistente, 1, 1, filestream_bin);
+
+    int topo, proxRRN;
+    // Lê o topo da pilha de removidos
+    fseek(filestream_bin, 1, SEEK_SET);
+    fread(&topo, 4, 1, filestream_bin);
+    // Lê o próximo RRN disponível para o fim do arquivo
+    fread(&proxRRN, 4, 1, filestream_bin);
+
+    for(int i = 0; i < n; i++){
+        REG_DADOS_STRUCT* registro_lido = ler_input_reg();
+
+        if(topo != -1){
+            // Reutilização do espaço na pilha de removidos
+            long offset = (long)topo * REG_DADOS_S + HEADER_S;
+            fseek(filestream_bin, offset + 1, SEEK_SET); // Pula o byte 'removido' para ler o próximo da pilha
+            
+            int proximo_na_pilha;
+            fread(&proximo_na_pilha, 4, 1, filestream_bin);
+
+            // Volta para o início do registro para escrever os novos dados
+            fseek(filestream_bin, offset, SEEK_SET);
+            escreve_registro(registro_lido, filestream_bin);
+
+            // Atualiza o topo da pilha
+            topo = proximo_na_pilha;
+        }else{
+            // Usa o proxRRN para inserir no fim
+            long offset = (long)proxRRN * REG_DADOS_S + HEADER_S;
+            fseek(filestream_bin, offset, SEEK_SET);
+            escreve_registro(registro_lido, filestream_bin);
+            
+            proxRRN++; // Incrementa o contador de registros do arquivo
+        }
+
+        // Limpeza de memória do registro lido
+        if(registro_lido->nomeEstacao) free(registro_lido->nomeEstacao);
+        if(registro_lido->nomeLinha) free(registro_lido->nomeLinha);
+        free(registro_lido);
+    }
+
+    // Atualiza o cabeçalho final
+    fseek(filestream_bin, 1, SEEK_SET);
+    fwrite(&topo, 4, 1, filestream_bin);    // Novo topo da pilha
+    fwrite(&proxRRN, 4, 1, filestream_bin); // Novo próximo RRN
+
+    // Marca como consistente e fecha o arquivo
+    unsigned char status_consistente = 1;
+    fseek(filestream_bin, 0, SEEK_SET);
+    fwrite(&status_consistente, 1, 1, filestream_bin);
+
+    fclose(filestream_bin);
 }
