@@ -1,7 +1,8 @@
 #include<stdio.h>
 #include<string.h>	
 #include<stdlib.h>
-#include "func.h"
+#include "../include/func.h"
+#include "../include/datamanager.h"
 
 int main(void){ // não receberemos argumentos da linha de comando
 
@@ -12,22 +13,34 @@ int main(void){ // não receberemos argumentos da linha de comando
 	int funcionalidade; // armazena o código de 1 a 6 da funcionalidade que o usuário quer usar
 	funcionalidade = atoi(strtok(comando_usuario, " ")); // começa a interpretar o comando: extrai o primeiro trecho delimitado por espaço, e transforma em inteiro
 	
-	printf("Você escolheu a funcionalidade %d\n", funcionalidade); // DEBUG!!!
+	char* token1 = strtok(NULL, " ");
+	char* token2 = strtok(NULL, " ");
 	
 	switch(funcionalidade){
 		case 1:
-			func_1(strtok(NULL, " "), strtok(NULL, " ")); // executa a funcionalidade 1, passando como argumento os nomes dos arquivos especificados pelo usuário. A ordem dos argumentos na função é o contrário da ordem digitada pelo usuário, pois o C executa primeiro o strtok mais à direita, e por último o mais à esquerda
+			if(token1 && token2)
+				func_1(token1, token2);
 			break;
 		case 2:
-			func_2("saida.bin");
+			if(token1)
+				func_2(token1);
 			break;
 		case 3:
-			func_3("saida.bin", 1);
+			if(token1 && token2)
+				func_3(token1, atoi(token2));
+			break;
+		case 4:
+			if(token1 && token2)
+				func_4(token1, atoi(token2));
 			break;
 		case 5:
-			func_5("saida.bin", 1);
-			func_2("saida.bin");
+			if(token1 && token2)
+				func_5(token1, atoi(token2));
+			break;
+		case 6:
+			if(token1 && token2)
+				func_6(token1, atoi(token2));
 	}
-	
+
 	return 0;
 }
