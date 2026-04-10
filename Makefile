@@ -36,6 +36,6 @@ clean:
 	rm -rf $(OBJ_DIR) $(TARGET)
 
 run:
-	valgrind --leak-check=full ./$(TARGET) 
+	./$(TARGET) 
 
 .PHONY: all clean

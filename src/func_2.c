@@ -12,10 +12,10 @@
 void func_2(char* arquivoBin){
 
 	// abre o arquivo bin em modo leitura
-	FILE* filestream_bin = abre_binario(arquivoBin, "rb");
+	FILE* filestream_bin = abre_binario(arquivoBin, false);
 	if(filestream_bin == NULL){
-		printf("Falha no processamento do arquivo.\n");
-		return;
+		DEBUG("ERRO EM func_2: FALHA EM ABRIR O ARQUIVO BIN %s.\n", arquivoBin);
+		goto erro;
 	}
 
 	fseek(filestream_bin, HEADER_S, SEEK_SET);
@@ -37,5 +37,21 @@ void func_2(char* arquivoBin){
         printf("Registro inexistente.\n");
     }
 
-	fecha_binario(filestream_bin);
+    // FECHANDO ARQUIVO
+
+	if(fecha_binario(filestream_bin) != 0){
+		DEBUG("DEBUG: ERRO AO FECHAR BIN %s\n", arquivoBin);
+		goto erro;
+	}
+
+	return;
+
+	erro:
+
+	if(fecha_binario(filestream_bin) != 0){
+		DEBUG("DEBUG: ERRO AO FECHAR BIN %s\n", arquivoBin);
+	}
+	printf("Falha no processamento do arquivo.\n");
+
+	return;
 }

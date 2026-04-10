@@ -12,17 +12,21 @@
  */
 void func_4(char* arquivoBin, int n){
 
+    REG_DADOS_STRUCT* registros_de_busca = NULL;
+    int* mask = NULL;
+
     // ABRINDO O ARQUIVO:
 
     // abre o arquivo binário em modo de leitura e escrita
-    FILE* filestream_bin = abre_binario(arquivoBin, "rb+");
+    FILE* filestream_bin = abre_binario(arquivoBin, true);
     if(filestream_bin == NULL){
-        printf("Falha no processamento do arquivo.\n");
-        return;
-    };
+        DEBUG("ERRO EM func_4: FALHA AO ABRIR O ARQUIVO BINÁRIO %s\n", arquivoBin);
+        goto erro;
+    }
 
-    REG_DADOS_STRUCT* registros_de_busca = (REG_DADOS_STRUCT* )malloc(n*sizeof(REG_DADOS_STRUCT));   // Cria um vetor com os registros chaves para busca dos registros a serem excluídos, 
-    int* mask = (int* )calloc(n, sizeof(int));                                                        // e tambem um vetor com um bit mask dos campos utilizados para busca
+    registros_de_busca = (REG_DADOS_STRUCT*)malloc(n*sizeof(REG_DADOS_STRUCT));   // Cria um vetor com os registros chaves para busca dos registros a serem excluídos, 
+    mask = (int*)calloc(n, sizeof(int)); // e também um vetor com um bit mask dos campos utilizados para busca
+    if(registros_de_busca == NULL || mask == NULL){DEBUG("ERRO EM func_3: ALOCAÇÃO DE MEMÓRIA.\n"); goto erro;}                           
 
     for(int i = 0; i < n; i++){  // lê as n entradas de argumentos para buscas
         ler_campos(&(registros_de_busca[i]), &(mask[i]));
@@ -55,10 +59,13 @@ void func_4(char* arquivoBin, int n){
 
     // ATUALIZANDO CABEÇALHO E FECHANDO ARQUIVO
     
-    fecha_binario(filestream_bin);
+    if(fecha_binario(filestream_bin) != 0){
+        DEBUG("DEBUG: ERRO AO FECHAR BIN %s\n", arquivoBin);
+        goto erro;
+    }
     atualizar_cabecalho(arquivoBin, topoPilha, proxRRN);
 
-
+    // LIMPANDO E RETORNANDO
 
     free(registros_de_busca);
     free(mask);
@@ -67,4 +74,17 @@ void func_4(char* arquivoBin, int n){
     #ifdef PRINT_ERROS
     ExibirBinario(arquivoBin);
     #endif
+
+    return;
+
+    erro:
+
+    free(registros_de_busca);
+    free(mask);
+    if(fecha_binario(filestream_bin) != 0){
+        DEBUG("DEBUG: ERRO AO FECHAR BIN %s\n", arquivoBin);
+    }
+    printf("Falha no processamento do arquivo.\n");
+
+    return;
 }

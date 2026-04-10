@@ -64,9 +64,16 @@ void ScanQuoteString(char *str) {
 }
 
 
-
-// Função auxiliar para processar strings
-// Lê uma string campo e a duplica na memória, e retorna o endereço da cópia
+/**Objetivo: escrever o tamanho de uma string em um inteiro e retornar uma ćópia da string
+ * 
+ * Pré-condições:
+ *      nenhuma
+ * 
+ * Pós-condições:
+ *      Erro: tam recebe um != 0 mas o retorno é NULL
+ *      Sucesso: escreve tam com o tamanho da string, e retorna uma cópia da string
+ *      Chamador deve: apagar a cópia
+ **/
 char* processar_string(char* campo, int* tam){
     if(campo == NULL || strlen(campo) == 0){
         *tam = 0;
@@ -76,14 +83,21 @@ char* processar_string(char* campo, int* tam){
         char* copia = strdup(campo);
         if(copia == NULL){
                 DEBUG("DEBUG: ERRO AO COPIAR A STRING DO CAMPO LIDO");
-                exit(2);
         }
         return copia;
     }
 }
 
-// Função auxiliar para processar inteiros
-// Lê uma string e retorna o número correspondente. Se for nula ou sem comprimento, retorna erro.
+/**Objetivo: receber uma string que descreve um inteiro e retornar
+ * 
+ * Pré-condições
+ *      Parâmetro não pode ser nulo
+ *      String deve ter tamanho maior que 0
+ * 
+ * Pós-condições
+ *      Erro: retorna -1
+ *      Sucesso: o inteiro descrito pela string
+ **/
 int processar_int(char* campo){
     if(campo == NULL || strlen(campo) == 0){
         return -1;
@@ -93,6 +107,17 @@ int processar_int(char* campo){
 
 
 
+/**Objetivo: ler um campo de tamanho variável de um arquivo binário e exibir seu conteúdo ou "NULO".
+ * 
+ * Pré-condições:
+ *      arquivo deve estar aberto em modo de leitura binária.
+ *      O cursor do arquivo deve estar posicionado no início do indicador de tamanho (int) do campo.
+ * 
+ * Pós-condições:
+ *      Erro: se a leitura do tamanho falhar, a função retorna silenciosamente.
+ *      Sucesso: exibe a string seguida de um espaço, ou a palavra "NULO " caso o tamanho seja 0.
+ *      O cursor do arquivo é avançado para o final do campo lido.
+ **/
 void print_campo_string(FILE* filestream_bin) {
     int tam;
     // Lê o indicador de tamanho
@@ -100,7 +125,7 @@ void print_campo_string(FILE* filestream_bin) {
 
     if(tam > 0){ // Se o tamanho do campo for maior que 0, o campo string não é NULO
         char *temp = (char* )malloc(tam + 1);
-        if(temp){
+        if(temp){ // Se conseguiu alocar
             fread(temp, 1, tam, filestream_bin);
             temp[tam] = '\0'; // adiciona o '/0' no final da string para utilizar o 'printf'
             printf("%s ", temp);
@@ -111,6 +136,17 @@ void print_campo_string(FILE* filestream_bin) {
     }
 }
 
+/**Objetivo: ler e imprimir os dados de um registro de estação, tratando campos nulos e registros removidos.
+ * 
+ * Pré-condições:
+ *      arquivo deve estar aberto em modo de leitura binária.
+ *      O cursor deve estar posicionado no início de um registro de dados.
+ * 
+ * Pós-condições:
+ *      Se o registro estiver removido, imprime nada. 
+ *      Caso contrário, imprime os campos do registro no console, usando "NULO" para valores -1 ou strings vazias. 
+ *      O cursor fica no início do próximo registro
+ **/
 void print_registro(FILE* filestream_bin){
     unsigned char removido;
     long pos_inicial = ftell(filestream_bin);

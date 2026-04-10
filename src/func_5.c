@@ -2,6 +2,16 @@
 #include "../include/datamanager.h"
 
 
+/**Objetivo: ler um registro de dados completo, com todos os valores fornecidos pelo usuário
+ * 
+ * Pré-condições:
+ *      Buffer de entrada padrão deve estar limpo
+ * 
+ * Pós-condições:
+ *      Erro: retorna NULL
+ *      Sucesso: retorna um registro com todos os campos preenchidos
+ *      Chamador deve: apagar os campos strings do registro, e depois o próprio registro.
+ **/
 REG_DADOS_STRUCT* ler_input_reg(){
 
     REG_DADOS_STRUCT* registro_lido = (REG_DADOS_STRUCT*)malloc(sizeof(REG_DADOS_STRUCT));
@@ -17,7 +27,7 @@ REG_DADOS_STRUCT* ler_input_reg(){
 
     // codEstacao
     ScanQuoteString(buffer);
-    registro_lido->codEstacao = (strlen(buffer) == 0) ? -1 : atoi(buffer);
+    registro_lido->codEstacao = processar_int(buffer);
 
     // nomeEstacao
     ScanQuoteString(buffer); 
@@ -25,7 +35,7 @@ REG_DADOS_STRUCT* ler_input_reg(){
 
     // codLinha
     ScanQuoteString(buffer);
-    registro_lido->codLinha = (strlen(buffer) == 0) ? -1 : atoi(buffer);
+    registro_lido->codLinha = processar_int(buffer);
 
     // nomeLinha
     ScanQuoteString(buffer);
@@ -33,19 +43,19 @@ REG_DADOS_STRUCT* ler_input_reg(){
 
     // codProxEstacao
     ScanQuoteString(buffer);
-    registro_lido->codProxEstacao = (strlen(buffer) == 0) ? -1 : atoi(buffer);
+    registro_lido->codProxEstacao = processar_int(buffer);
 
     // distProxEstacao
     ScanQuoteString(buffer);
-    registro_lido->distProxEstacao = (strlen(buffer) == 0) ? -1 : atoi(buffer);
+    registro_lido->distProxEstacao = processar_int(buffer);
 
     // codLinhaIntegra
     ScanQuoteString(buffer);
-    registro_lido->codLinhaIntegra = (strlen(buffer) == 0) ? -1 : atoi(buffer);
+    registro_lido->codLinhaIntegra = processar_int(buffer);
 
     // codEstIntegra
     ScanQuoteString(buffer);
-    registro_lido->codEstIntegra = (strlen(buffer) == 0) ? -1 : atoi(buffer);
+    registro_lido->codEstIntegra = processar_int(buffer);
 
     return registro_lido;
 }
@@ -60,12 +70,16 @@ REG_DADOS_STRUCT* ler_input_reg(){
  * @return void
  */
 void func_5(char* arquivoBin, int n){
+
+    // ABRINDO ARQUIVO
     
-    FILE* filestream_bin = fopen(arquivoBin, "rb+");
+    FILE* filestream_bin = abre_binario(arquivoBin, true);
     if(filestream_bin == NULL){
-        printf("Falha no processamento do arquivo.\n");
-        return;
+        DEBUG("DEBUG EM func_5: FALHA AO ABRIR O ARQUIVO %s.\n", arquivoBin);
+        goto erro;
     }
+
+    // LENDO E INSERINDO CADA REGISTRO, CONFORME A PILHA DE REMOVIDOS
 
     int topo, proxRRN;
     // Lê o topo da pilha de removidos
@@ -76,6 +90,9 @@ void func_5(char* arquivoBin, int n){
 
     for(int i = 0; i < n; i++){
         REG_DADOS_STRUCT* registro_lido = ler_input_reg();
+        if(registro_lido == NULL){
+            DEBUG("ERRO EM func_5: NÃO FOI POSSÍVEL OBTER VALORES DO USUÁRIO PARA O REGISTRO.\n"); continue;
+        }
 
         if(topo != -1){
             // Reutilização do espaço na pilha de removidos
@@ -87,7 +104,9 @@ void func_5(char* arquivoBin, int n){
 
             // Volta para o início do registro para escrever os novos dados
             fseek(filestream_bin, offset, SEEK_SET);
-            escreve_registro(registro_lido, filestream_bin);
+            if(escreve_registro(registro_lido, filestream_bin) == false){
+                DEBUG("ERRO EM func_5: FALHA EM ESCREVER REGISTRO NO ARQUIVO. codEstacao = %d.\n", registro_lido->codEstacao);
+            }
 
             // Atualiza o topo da pilha
             topo = proximo_na_pilha;
@@ -95,7 +114,9 @@ void func_5(char* arquivoBin, int n){
             // Usa o proxRRN para inserir no fim
             long offset = (long)proxRRN * REG_DADOS_S + HEADER_S;
             fseek(filestream_bin, offset, SEEK_SET);
-            escreve_registro(registro_lido, filestream_bin);
+            if(escreve_registro(registro_lido, filestream_bin) == false){
+                DEBUG("ERRO EM func_5: FALHA EM ESCREVER REGISTRO NO ARQUIVO. codEstacao = %d.\n", registro_lido->codEstacao);
+            }
             
             proxRRN++; // Incrementa o contador de registros do arquivo
         }
@@ -107,12 +128,27 @@ void func_5(char* arquivoBin, int n){
     }
 
     // ATUALIZANDO CABEÇALHO E FECHANDO ARQUIVO
-    fecha_binario(filestream_bin);
+    
+    if(fecha_binario(filestream_bin) != 0){
+        DEBUG("DEBUG: ERRO AO FECHAR BIN %s\n", arquivoBin);
+        goto erro;
+    }
     atualizar_cabecalho(arquivoBin, topo, proxRRN);
+
+    // RETORNANDO
 
     BinarioNaTela(arquivoBin);
 
     #ifdef PRINT_ERROS
         ExibirBinario(arquivoBin);
     #endif
+
+    return;
+
+    erro:
+
+    if(fecha_binario(filestream_bin) != 0){
+        DEBUG("DEBUG: ERRO AO FECHAR BIN %s\n", arquivoBin);
+    }
+    printf("Falha no processamento do arquivo.\n");
 }

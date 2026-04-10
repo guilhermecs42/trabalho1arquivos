@@ -12,20 +12,29 @@
  */
 void func_3(char* arquivoBin, int n){
 
-    // Abre o arquivo binário em modo de leitura
-    FILE* filestream_bin = abre_binario(arquivoBin, "rb");
+    REG_DADOS_STRUCT* registros_de_busca = NULL;
+    int* mask = NULL;
+
+    // ABRINDO ARQUIVO
+ 
+    FILE* filestream_bin = abre_binario(arquivoBin, false); // Abre o arquivo binário em modo de leitura
     if(filestream_bin == NULL){
-        printf("Falha no processamento do arquivo.\n");
-        return;
+        DEBUG("ERRO EM func_3: ERRO AO ABRIR O BINÁRIO %s.\n", arquivoBin);
+        goto erro;
     }
 
+    // COLETANDO CRITÉRIOS DE BUSCA
+
     // Cria um vetor com os registros chaves de busca, e tambem um vetor com um bit mask dos campos utilizados para busca
-    REG_DADOS_STRUCT* registros_de_busca = (REG_DADOS_STRUCT* )malloc(n*sizeof(REG_DADOS_STRUCT));
-    int* mask = (int* )calloc(n, sizeof(int));
+    registros_de_busca = (REG_DADOS_STRUCT* )malloc(n*sizeof(REG_DADOS_STRUCT));
+    mask = (int* )calloc(n, sizeof(int));
+    if(registros_de_busca == NULL || mask == NULL){DEBUG("ERRO EM func_3: ALOCAÇÃO DE MEMÓRIA.\n"); goto erro;}
 
     for(int i = 0; i < n; i++){ // lê as n entradas de argumentos para buscas
         ler_campos(&registros_de_busca[i], &mask[i]);
     }
+
+    // BUSCANDO REGISTROS DE DADOS
 
     int topoPilha, proxRRN;
     fseek(filestream_bin, 1, SEEK_SET);
@@ -52,8 +61,28 @@ void func_3(char* arquivoBin, int n){
         if (mask[i] & 128) free(registros_de_busca[i].nomeLinha);
     }
 
-    fecha_binario(filestream_bin);
-    
+    // FECHANDO ARQUIVO
+
+    if(fecha_binario(filestream_bin) != 0){
+        DEBUG("DEBUG: ERRO AO FECHAR BIN %s\n", arquivoBin);
+        goto erro;
+    }
+
+    // LIMPANDO E RETORNANDO
+
     free(registros_de_busca);
     free(mask);
+
+    return;
+
+    erro:
+
+    free(registros_de_busca);
+    free(mask);
+    if(fecha_binario(filestream_bin) != 0){
+        DEBUG("DEBUG: ERRO AO FECHAR BIN %s\n", arquivoBin);
+    }
+    printf("Falha no processamento do arquivo.\n");
+
+    return;
 }

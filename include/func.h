@@ -13,7 +13,7 @@
 	 */
 	void func_1(char* arquivoEntrada, char* arquivoSaida);
 
-		/**
+   /**
 	 * @brief Funcionalidade [2]: Recupera e exibe todos os registros do arquivo binário.
 	 * Simula o comando SQL 'SELECT FROM'. Percorre sequencialmente o arquivo binário 
 	 * e imprime todos os registros que não estão marcados como logicamente removidos. 

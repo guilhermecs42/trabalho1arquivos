@@ -1,17 +1,28 @@
 #include "../include/definicoes.h"
 #include "../include/datamanager.h"
 
-// Essa função recebe uma linha do arquivo csv e retorna um struct REG_DADOS_STRUCT contendo as informações naquela linha
+/**Objetivo: ler uma linha do csv e converter em um struct na memória
+ * Pré-condições:
+ * 		linha deve ser uma string formada por 8 valores separados por vírgula, valores nulos como vírgulas adjacentes e \0 no final.
+ * Pós condições:
+ * 		Erro: retorna NULL
+ * 		Sucesso: retorna um struct com todos os campos válidos
+ * 		Chamador deve: apagar o struct.
+ **/
 static REG_DADOS_STRUCT* ler_linha_csv(char* linha){
     if(linha == NULL){
-    	DEBUG("Falha no processamento: linha nula.\n");
-    	printf("Falha no processamento do arquivo.\n");
-      	exit(1);
+    	DEBUG("ERRO EM ler_linha_csv: LINHA NULA.\n");
+    	return NULL;
     }
 
+    // ALOCANDO E INICIALIZANDO STRUCT
+
     REG_DADOS_STRUCT* registro_lido = (REG_DADOS_STRUCT*) malloc (sizeof(REG_DADOS_STRUCT));
+    if(registro_lido == NULL){
+    	DEBUG("ERRO EM ler_linha_csv: FALAH DE ALOCAÇÃO DE MEMÓRIA.\n");
+    	return NULL;
+    }
     registro_lido->nomeEstacao = NULL; registro_lido->nomeLinha = NULL; // inicializando ponteiros como nulo para liberar memória com segurança
-    
     registro_lido->removido = '0'; // Seguindo a lógica de registro ativo
     registro_lido->proximo = -1; // Conforme a especificação
 
@@ -24,10 +35,11 @@ static REG_DADOS_STRUCT* ler_linha_csv(char* linha){
 
         // Se strsep retornar NULL antes do 8º campo, a linha está incompleta
         if(campo == NULL){
-            DEBUG("Falha no processamento: linha incompleta.\n");
-            printf("Falha no processamento do arquivo.\n");
+            DEBUG("ERRO EM ler_linha_csv: LINHA INCOMPLETA.\n");
+            free(registro_lido->nomeEstacao);
+            free(registro_lido->nomeLinha);
             free(registro_lido);
-            exit(1);
+            return NULL;
         }
 
         switch(i){
@@ -44,33 +56,44 @@ static REG_DADOS_STRUCT* ler_linha_csv(char* linha){
 
     // Se após os 8 campos o ponteiro 'ptr' não for NULL, existem campos extras
     if(ptr != NULL){
-        DEBUG("Falha no processamento: linha com campos extras.\n");
-        printf("Falha no processamento do arquivo.\n");
-	    free(registro_lido);
-		exit(1);
+		DEBUG("ERRO EM ler_linha_csv: LINHA COM CAMPOS A MAIS.\n");
+        free(registro_lido->nomeEstacao);
+        free(registro_lido->nomeLinha);
+		free(registro_lido);
+        return NULL;
     }
 
     return registro_lido;
 }
 
+/**
+	 * @brief Funcionalidade [1]: Converte um arquivo csv para binário, de acordo com a especificação.
+	 * Simula o comando SQL 'CREATE TABLE'. Percorre sequencialmente o arquivo csv e 
+	 * e gera os registros de dados correspondentes a cada linha. 
+	 * Nenhum registro é marcado como logicamente removido
+	 * O cabeçalho é gerado com a contagem correta de estações e de pares (codEstacao, codProxEstacao)
+	 * @param arquivoEntrada Nome do arquivo csv de onde os dados serão lidos
+	 * @param arquivoEntrada Nome do arquivo binário que será produzido
+	 * @return void
+	 */
 void func_1(char* arquivoEntrada, char* arquivoSaida){ // a ordem dos argumentos é o contrário da ordem digitada pelo usuário, devido à ordem de empilhamento dos argumentos na memória, lembrando que cada argumento é o retorno de uma chamada de strtok
 	
 	FILE* filestream_csv = NULL;
 	FILE* filestream_bin = NULL;
+	REG_DADOS_STRUCT* registro_lido = NULL;
 	
 	// ABRIR CSV EM MODO LEITURA
 	filestream_csv = fopen(arquivoEntrada, "r"); // abre o arquivo csv em modo leitura e como texto
 	if(filestream_csv == NULL){ // se falhou
-		printf("Falha no processamento do arquivo.\n");
-		DEBUG("DEBUG: ERRO AO ABRIR CSV\n");
-		goto fechar;
+		DEBUG("ERRO EM func_1: ERRO AO ABRIR CSV\n");
+		goto erro;
 	}
 	
 	// CRIAR ARQUIVO BINÁRIO EM MODO ESCRITA
 	filestream_bin = fopen(arquivoSaida, "wb"); // abre o arquivo de saída em modo escrita e como binário
 	if(filestream_bin == NULL){ // se falhou
-		printf("Falha no processamento do arquivo.\n");
-		goto fechar;
+		DEBUG("ERRO EM func_1: ERRO AO ABRIR BINÁRIO\n");
+		goto erro;
 	}
 	
 	// ESCREVER REGISTRO DE CABEÇALHO DUMMY
@@ -94,9 +117,8 @@ void func_1(char* arquivoEntrada, char* arquivoSaida){ // a ordem dos argumentos
 	linha[strcspn(linha, "\r\n")] = '\0'; // faz a linha terminar em \0
 	 
 	if(strcmp(linha, "CodEstacao,NomeEstacao,CodLinha,NomeLinha,CodProxEst,DistanciaProxEst,CodLinhaInteg,CodEstacaoInteg") != 0){
-		printf("Falha no processamento do arquivo.\n");
-		DEBUG("DEBUG: PRIMEIRA LINHA NÃO CORRESPONDE AO ESPERADO\n");
-		goto fechar;
+		DEBUG("ERRO EM func_1: PRIMEIRA LINHA NÃO CORRESPONDE AO ESPERADO\n");
+		goto erro;
 	}
 	
 	while(fgets(linha, sizeof(linha), filestream_csv)){ // lê novas linhas até chegar ao fim do arquivo, quando fgets retorna NULL
@@ -104,21 +126,37 @@ void func_1(char* arquivoEntrada, char* arquivoSaida){ // a ordem dos argumentos
 		//DEBUG("DEBUG: LENDO REGISTRO DE DADOS\n");
 	
 		linha[strcspn(linha, "\r\n")] = '\0'; // faz a linha terminar em \0
-		REG_DADOS_STRUCT* registro_lido = ler_linha_csv(linha);
+		registro_lido = ler_linha_csv(linha);
+		if(registro_lido == NULL){
+			DEBUG("ERRO EM func_1: FALHA EM LER LINHA DO CSV %s\n", arquivoEntrada);
+			goto erro;
+		}
 		
 		// ESCREVER O REGISTRO NO BINÁRIO E NAS ESTRUTURAS
 
-		escreve_registro(registro_lido, filestream_bin); 
+		if(escreve_registro(registro_lido, filestream_bin) == false){
+			DEBUG("ERRO EM func_1: FALHA EM ESCREVER REGISTRO NO BINÁRIO %s\n", arquivoSaida);
+			goto erro;
+		} 
 		proxRRN++;
 
 		free(registro_lido->nomeEstacao);
 		free(registro_lido->nomeLinha);
-		free(registro_lido);
-
 	}
 
-	fclose(filestream_csv);
-	fclose(filestream_bin);
+	// FECHANDO ARQUIVOS E ATUALIZANDO CABEÇALHO
+	
+	if(filestream_csv != NULL){
+		if(fclose(filestream_csv) != 0){
+			DEBUG("DEBUG: ERRO AO FECHAR CSV %s\n", arquivoEntrada);
+			goto erro;
+		}
+	}
+	if(fecha_binario(filestream_bin) != 0){
+		DEBUG("DEBUG: ERRO AO FECHAR BIN %s\n", arquivoSaida);
+		goto erro;
+	}
+
 	atualizar_cabecalho(arquivoSaida, -1, proxRRN);
 	
 	// EXIBINDO ARQUIVO
@@ -126,28 +164,33 @@ void func_1(char* arquivoEntrada, char* arquivoSaida){ // a ordem dos argumentos
 	BinarioNaTela(arquivoSaida);
 	#ifdef PRINT_ERROS
 	ExibirBinario(arquivoSaida);
-	#endif 
+	#endif
 
 	return;
 	
-	// FECHAR ARQUIVOS
-	fechar:
-	
+	// TRATAMENTO DE ERRO:
+
+	erro: 
+
+	if(registro_lido != NULL){
+		free(registro_lido->nomeEstacao);
+		free(registro_lido->nomeLinha);
+	}
+	free(registro_lido);
+
 	if(filestream_csv != NULL){
 		if(fclose(filestream_csv) != 0){
-			printf("Falha no processamento do arquivo.\n");
-			DEBUG("DEBUG: ERRO AO FECHAR CSV\n");
-			exit(1);
+			DEBUG("DEBUG: ERRO AO FECHAR CSV %s\n", arquivoEntrada);
 		}
 	}
 	
 	if(filestream_bin != NULL){
 		if(fecha_binario(filestream_bin) != 0){
-			printf("Falha no processamento do arquivo.\n");
-			DEBUG("DEBUG: ERRO AO FECHAR BIN\n");
-			exit(1);
+			DEBUG("DEBUG: ERRO AO FECHAR BIN %s\n", arquivoSaida);
 		}
 	}
+
+	printf("Falha no processamento do arquivo.\n");
 
 	return;
 }

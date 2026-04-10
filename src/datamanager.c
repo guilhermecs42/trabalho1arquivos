@@ -5,14 +5,19 @@
 #include <string.h>
 #include <sys/types.h>
 
-// EXPLICAR POR QUE OPTAMOS POR ÁRVORE BINÁRIA
-
 /*
-Temos duas estruturas de dados para contabilizar eficientemente quantas estações
-diferentes existem e quantos pares (codEstacao, proxEstacao) diferentes existem.
+O uso de árvore binária foi a solução encontrada para o problema de calcular a
+quantidade de elementos distintos, seja estações, sejam pares (codEstacao, codProxEstacao).
+Os elementos são inseridos em suas respectivas árvores. Então é feito um percurso em ordem 
+contabilizando a quantidade de vezes que o conteúdo do nó atual muda em relação ao anterior.
+Como a inserção de um item em uma árvore balanceada é O(log k), em que k é a quantidade
+atual de nós, a inserção de n nós é O(log n!), que é assintoticamente igual a O(n log n).
 
-Cada estrutura de dados utiliza funções customizadas para ordenar, identificar 
-e apagar o tipo de item para os quais cada nó aponta.
+São definidas duas árvores visíveis para todo o arquivo, mas invisíveis para os outros. A única
+forma de outros arquivos interagirem com essas árvores é a partir da função atualizar_cabecalho 
+
+Cada árvore utiliza funções customizadas para ordenar, identificar e apagar o tipo de item 
+para os quais cada nó aponta. Os tipos dessas funções são especificados em tabelafuncoes.h.
 
 Esse arquivo define esses dois tipos de itens e as funções aplicáveis a cada um.
 */
@@ -108,7 +113,8 @@ bool nroParesEstacaoItem_identificar(void* item1, void* item2){
     return (ptr1->codEstacao == ptr2->codEstacao) && (ptr1->codProxEstacao == ptr2->codProxEstacao);
 }
 
-
+// A seguir seguem dois vetores de ponteiros para função. Cada árvore recebe a sua respectiva Tabela
+// de Funções após serem criadas. 
 
 static const TABELA_FUNCOES nroEstacoesItemFuncoes = {
     nroEstacoesItem_apagar,
@@ -126,36 +132,37 @@ static const TABELA_FUNCOES nroParesEstacaoItemFuncoes = {
 
 
 
-// FIM DAS DEFINIÇÕES DAS ESTRUTURAS DE DADOS
-
-
-
-
-
 
 
 // INÍCIO DAS FUNÇÕES QUE GERENCIAM DISCO E ESTRUTURA DE DADOS
 
-FILE* abre_binario(char* arquivoBin, char* modo){
+
+
+
+
+
+/**Objetivo: abrir um arquivo binário em modo especificado do Banco de Dados.  
+ * 
+ * Pré-condições: 
+ *      O caminho/nome do arquivo deve existir e ter as permissões necessárias
+ *      A necessidade de permissão de atualização (escrita) deve ser explicitada no parâmetro
+ *      O status do arquivo deve ser '1'
+ * 
+ * Pós condições: 
+ *      Erro: retorna nulo
+ *      Sucesso: retorna filestream do arquivo com o modo especificado, status '0' se for de atualização. Abrir em modo de leitura não afeta o status.
+ *      Chamador deve: fechar a filestream com a função fecha_binario() para impor status '1', se necessário.
+ */
+FILE* abre_binario(char* arquivoBin, bool escrita){
     
-    // Testando se o modo de abrir o arquivo é válido:
-    if( strcmp(modo, "rb") != 0 && 
-        strcmp(modo, "wb") != 0 &&
-        strcmp(modo, "ab") != 0 &&
-        strcmp(modo, "rb+") != 0 &&
-        strcmp(modo, "wb+") != 0 &&
-        strcmp(modo, "ab+"))
-    {
-        DEBUG("DEBUG: %s NÃO É UM MODO VÁLIDO. NÃO PÔDE ABRIR O ARQUIVO %s.\n", modo, arquivoBin);
-    }
+    char* modo = escrita ? "rb+" : "rb";
 
     // abre o arquivo bin em modo leitura
     FILE* filestream_bin = fopen(arquivoBin, modo);
     if(filestream_bin == NULL){ // se falhou
-        DEBUG("DEBUG: ERRO AO ABRIR O BINÁRIO %s\n", arquivoBin);
+        DEBUG("ERRO EM abre_binario: ERRO AO ABRIR O BINÁRIO %s. VERIFIQUE EXISTÊNCIA E PERMISSÕES.\n", arquivoBin);
         return NULL;
     }
-    fseek(filestream_bin, 0, SEEK_SET);
 
     // Lê o status do arquivo
     unsigned char status;
@@ -166,20 +173,52 @@ FILE* abre_binario(char* arquivoBin, char* modo){
         return NULL;
     }
 
-    // Reescreve o status do arquivo
-    fseek(filestream_bin, 0, SEEK_SET);
-    status = '0';
-    fwrite(&status, 1, 1, filestream_bin);
+    if(escrita){
+        // Reescreve o status do arquivo
+        fseek(filestream_bin, 0, SEEK_SET);
+        status = '0';
+        fwrite(&status, 1, 1, filestream_bin);
+    }
     fseek(filestream_bin, 0, SEEK_SET); // Voltando ao começo
 
     return filestream_bin;
 }
 
-void escreve_registro(REG_DADOS_STRUCT* registro_lido, FILE* filestream_bin){
+/**Objetivo: escrever um registro de dados no arquivo binário
+ * 
+ * Pré-condições:
+ *      Filestream binária em modo de atualização
+ *      Cursor em uma posição compatível com o início de um registro de dados
+ *      O registro a ser inserido deve ser válido
+ * 
+ * Pós-condições:
+ *      Erro: retorna false, sem alterar a posição do cursor
+ *      Sucesso: retorna true, com o cursor apontado para a posição do próximo registro de dados
+ *      Chamador deve: apagar a struct e fechar o arquivo com fecha_binario
+ **/
+bool escreve_registro(REG_DADOS_STRUCT* registro_lido, FILE* filestream_bin){
+    if(registro_lido == NULL){
+        DEBUG("ERRO EM escreve_registro: REGISTRO NULO.\n");
+        return false;
+    }
+    if(filestream_bin == NULL){
+        DEBUG("ERRO EM escreve_registro: FILESTREAM NULA.\n");
+        return false;
+    }
+
+    long pos_inicial = ftell(filestream_bin);   
+    if( (pos_inicial - HEADER_S)%REG_DADOS_S != 0 ){
+        DEBUG("ERRO EM escreve_registro: CURSOR DE ARQUIVO NÃO ESTÁ NO INÍCIO DE UM REGISTRO DE DADOS.\n");
+        return false;
+    }
 
     // ESCREVENDO O STRUCT NO BINÁRIO
 
-    fwrite(&(registro_lido->removido), 1, 1, filestream_bin);
+    if (fwrite(&(registro_lido->removido), 1, 1, filestream_bin) != 1){
+        DEBUG("DEBUG: ESCRITA DO REGISTRO FALHOU. VERIFIQUE SE O ARQUIVO ESTÁ ABERTO EM MODO DE ESCRITA.\n");
+        fseek(filestream_bin, pos_inicial, SEEK_SET);
+        return false;
+    }
     fwrite(&(registro_lido->proximo), 1, 4, filestream_bin);
     fwrite(&(registro_lido->codEstacao), 1, 4, filestream_bin);
     fwrite(&(registro_lido->codLinha), 1, 4, filestream_bin);
@@ -204,11 +243,39 @@ void escreve_registro(REG_DADOS_STRUCT* registro_lido, FILE* filestream_bin){
         fwrite(&lixo, 1, 1, filestream_bin);
     }
 
-    return;
+    return true;
 }
 
-void atualiza_registro(REG_DADOS_STRUCT *campos_novos, int mask, int RRN, FILE *filestream_bin){
-    
+/**Objetivo: atualizar um registro no arquivo binário
+ * 
+ * Pré-condições:
+ *      Filestream binária em um modo que permita leitura e escrita
+ *      RRN dentro dos limites do binário
+ *      Struct campos_novos e mask foram inicializados juntos
+ * 
+ * Pós-condições:
+ *      Erro: retorna false, com posição do cursor indeterminada
+ *      Sucesso: retorna true, com o cursor apontado para a posição do próximo registro de dados
+ *      Chamador deve: apagar a struct e fechar o arquivo com fecha_binario
+ **/
+bool atualiza_registro(REG_DADOS_STRUCT *campos_novos, int mask, int RRN, FILE *filestream_bin){
+    if(campos_novos == NULL){
+        DEBUG("ERRO EM atualiza_registro: NÃO FOI FORNECIDO O VALOR DOS NOVOS CAMPOS.\n");
+        return false;
+    }
+
+    int proxRRN;
+    fseek(filestream_bin, 5, SEEK_SET);
+    if (fread(&proxRRN, 4, 1, filestream_bin) != 1){
+        DEBUG("ERRO EM atualiza_registro: LEITURA FALHOU. VERIFIQUE SE O ARQUIVO ESTÁ ABERTO EM MODO DE LEITURA.\n");
+        return false;
+    }
+    if(RRN < 0 || RRN >= proxRRN){
+        if(RRN < 0){ DEBUG("ERRO EM atualiza_registro: RRN < 0.\n");
+        }else{DEBUG("ERRO EM atualiza_registro: RRN MAIOR QUE O TAMANHO DO ARQUIVO.\n");}
+        return false;
+    }
+
     long int pos_reg = RRN * REG_DADOS_S + HEADER_S; // byte offset do registro atual
     
     // ATUALIZANDO CAMPOS INTEIROS
@@ -268,12 +335,21 @@ void atualiza_registro(REG_DADOS_STRUCT *campos_novos, int mask, int RRN, FILE *
 
     // Atualizando os valores na memória
     if(mask & 64){
-        strcpy(nomeEst, campos_novos->nomeEstacao);
-        tamNomeEst = strlen(nomeEst);
+        if (campos_novos->nomeEstacao != NULL) {
+            strcpy(nomeEst, campos_novos->nomeEstacao);
+            tamNomeEst = strlen(nomeEst);
+        }else{
+            tamNomeEst = 0; // Se não tem nome, tamanho é 0
+        }
     }
+
     if(mask & 128){
-        strcpy(nomeLinha, campos_novos->nomeLinha);
-        tamNomeLinha = strlen(nomeLinha);
+        if (campos_novos->nomeLinha != NULL) {
+            strcpy(nomeLinha, campos_novos->nomeLinha);
+            tamNomeLinha = strlen(nomeLinha);
+        }else{
+            tamNomeLinha = 0;
+        }
     }
 
     // Transferindo os valores da memória para o disco
@@ -293,14 +369,22 @@ void atualiza_registro(REG_DADOS_STRUCT *campos_novos, int mask, int RRN, FILE *
     fwrite(buffer_lixo, 1, quantidade, filestream_bin);
     
     free(buffer_lixo);
-    return;
+    return true;
 }
 
-/* Objetivo: verificar o RRN fornecido corresponde à busca realizada
-    - Os valores dos campos buscados, as chaves da busca, estão no struct chave
-    - Quais campos do struct são chaves está especificado em mask 
-    - Retorna true se todos os campos, especificados por mask, do RRN fornecido são iguais aos campos equivalentes do struct chave
-*/
+/**Objetivo: verificar o RRN fornecido corresponde à busca realizada
+ * 
+ * Pré-condições:
+ *      Filestream binária em um modo que permita leitura
+ *      Struct chave e mask foram inicializados juntos
+ *      Mask só pode ser 0 ou 1
+ *      RRN dentro dos limites do binário
+ * 
+ * Pós-condições:
+ *      Erro: retorna false, com mensagem de DEBUG. Posição do cursor indefinida
+ *      Sucesso: retorna false se não corresponde ou se está removido, true se corresponde. Posição do cursor indefinida
+ *      Chamador deve: apagar a struct e possivelmente a mask, e fechar o filestream com fecha_binario
+ **/
 bool check_registro(REG_DADOS_STRUCT* chave, int mask, int RRN, FILE* bin){
     fseek(bin, RRN * REG_DADOS_S + HEADER_S, SEEK_SET);
     
@@ -335,6 +419,8 @@ bool check_registro(REG_DADOS_STRUCT* chave, int mask, int RRN, FILE* bin){
     fread(&tNomeE, 4, 1, bin);
     if(mask & 64){
         if(tNomeE > 0){
+            if(tNomeE >= 100) return false; // caso o arquivo esteja corrompido, devemos impedir um tamanho grande de ser lido e causar buffer overflow
+
             char temp[100];
             fread(temp, 1, tNomeE, bin);
             temp[tNomeE] = '\0';
@@ -377,6 +463,18 @@ bool check_registro(REG_DADOS_STRUCT* chave, int mask, int RRN, FILE* bin){
     return true;
 }
 
+/**Objetivo: extrair um registro de dados do disco e colocar na memória
+ * 
+ * Pré-condições:
+ *      Filestream aberta em modo que permita leitura
+ *      Cursor posicionada no começo de um registro de arquivos
+ *      Struct mem_destino alocado propriamente
+ * 
+ * Pós-condições:
+ *      Erro: retorna false
+ *      Sucesso: retorna true. O cursor aponta para o próximo registro de dados
+ *      Chamador deve: apagar o registro da memória quando terminar de usar, fechar a filestream com fecha_binario
+ **/
 bool load_registro(FILE* filestream_bin, REG_DADOS_STRUCT* mem_destino){
 
     long pos_inicial = ftell(filestream_bin); // Armazena a posição inicial de leitura
@@ -450,6 +548,15 @@ bool load_registro(FILE* filestream_bin, REG_DADOS_STRUCT* mem_destino){
     return true;
 }
 
+/** Objetivo: povoar as árvores binárias com os elementos necessários para a contagem
+ * 
+ *  Pré-condições:
+ *      Filestream aberta em modo de leitura
+ * 
+ *  Pós condições:
+ *      Duas árvores criadas e preenchidas com elementos relevantes para contagem
+ *      Chamador deve: apagar as árvores por e fechar o filestream
+ */
 static void carregar_dados(FILE* filestream_bin){
 
     // APAGANDO POSSÍVEIS ESTRUTURAS DE DADOS
@@ -490,15 +597,21 @@ static void carregar_dados(FILE* filestream_bin){
     }
 }
 
-/* 
- - Recebe uma filestream aberta com permissão de escrita
-
-*/
+/**Objetivo: atualizar o cabeçalho de um arquivo binário, recontando os registros e marcando-o como consistente
+ * 
+ * Pré-condições:
+ *      topo e proxRRN devem ser calculados corretamente pela função chamadora
+ * 
+ * Pós-condições:
+ *      arquivo fechado com status consistente 
+**/
 void atualizar_cabecalho(char* arquivoBin, int topo, int proxRRN){
 
     FILE* filestream_bin = fopen(arquivoBin, "rb+");
+    if(filestream_bin == NULL){
+        DEBUG("ERRO EM atualizar_cabecalho: FALHA EM ABRIR O ARQUIVO. ELE EXISTE?\n");
+    }
     carregar_dados(filestream_bin); // CRIANDO E POPULANDO AS ESTRUTURAS DE DADOS A PARTIR DA INFORMAÇÃO NO DISCO
-
     
     // ATUALIZANDO TOPO DA PILHA E PROX RRN
     DEBUG("DEBUG CABECALHO: topo: %d, proxRRN: %d\n", topo, proxRRN);
@@ -527,7 +640,16 @@ void atualizar_cabecalho(char* arquivoBin, int topo, int proxRRN){
     return;
 }
 
+/**Objetivo: fechar o arquivo binário mantendo o status como 'consistente'
+ * 
+ * Pré-condições:
+ *      filestream_bin deve estar aberta em modo que permita escrita, ou ser NULL
+ * 
+ * Pós-condições:
+ *      filestream estará fechada e não será mais possível acessá-la
+ */
 int fecha_binario(FILE* filestream_bin){
+    if(filestream_bin == NULL) return 0;
 
     unsigned char status_consistente = '1';
     // ATUALIZANDO STATUS PARA CONSISTENTE

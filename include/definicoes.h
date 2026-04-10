@@ -48,22 +48,62 @@ e funções auxiliares que podem ser usadas por todo o código.
 	void ScanQuoteString(char *str);
 	void BinarioNaTela(char *arquivo);
 
-	// Função auxiliar para processar strings
-	// Lê uma string campo e a duplica na memória, e coloca o endereço dessa cópia em uma variável fora do escopo cujo endereço foi passado
+	/**Objetivo: escrever o tamanho de uma string em um inteiro e retornar uma ćópia da string
+	 * 
+	 * Pré-condições:
+	 *      nenhuma
+	 * 
+	 * Pós-condições:
+	 *      Erro: tam recebe um != 0 mas o retorno é NULL
+	 *      Sucesso: escreve tam com o tamanho da string, e retorna uma cópia da string
+	 *      Chamador deve: apagar a cópia
+	 **/
 	char* processar_string(char* campo, int* tam);
 
-	// Função auxiliar para processar inteiros
-	// Lê uma string e retorna o número correspondente. Se for nula ou sem comprimento, retorna erro.
+   /**Objetivo: receber uma string que descreve um inteiro e retornar
+	 * 
+	 * Pré-condições
+	 *      Parâmetro não pode ser nulo
+	 *      String deve ter tamanho maior que 0
+	 * 
+	 * Pós-condições
+	 *      Erro: retorna -1
+	 *      Sucesso: o inteiro descrito pela string
+	 **/
 	int processar_int(char* campo);
 
-	// Dado uma stream com cursor no início de um registro de dados, imprime o registro de dados
+	/**Objetivo: ler e imprimir os dados de um registro de estação, tratando campos nulos e registros removidos.
+	 * 
+	 * Pré-condições:
+	 *      arquivo deve estar aberto em modo de leitura binária
+	 *      O cursor deve estar posicionado no início de um registro de dados
+	 * 
+	 * Pós-condições:
+	 *      Se o registro estiver removido, imprime nada
+	 *      Caso contrário, imprime os campos do registro no console, usando "NULO" para valores -1 ou strings vazias
+	 *      O cursor fica no início do próximo registro
+	 **/
 	void print_registro(FILE* filestream_bin);
 
-	// lê e adiciona o campo lido ao registro chave de busca
+	/* Objetivo: ler uma linha do usuário com nomes de campos e valores de campos:
+	 *  	Armazena quais campos foram lidos em mask
+	 *   	Armazena os valores dos campos no struct registro_busca
+	 *   	Campos cujo valor é NULO são marcados como -1
+	 *   	Campos cujo valor não foi especificado são marcados com -1
+	 *   	Para diferenciar um campo nulo e um campo não especificado, acesse mask
+	 * Mask:
+	 *   - 1: codEstacao
+	 *   - 2: codLinha
+	 *   - 4: codProxEstacao
+	 *   - 8: distProxEstacao
+	 *   - 16: codLinhaIntegra
+	 *   - 32: codEstIntegra
+	 *   - 64: nomeEstacao
+	 *   - 128: nomeLinha
+	 **/
 	void ler_campos(REG_DADOS_STRUCT* registro_busca, int* mask);
 
-	bool check_registro(REG_DADOS_STRUCT* busca, int mask, int RRN, FILE* bin);
-
+	// Função para debug
 	void ExibirBinario(char *arquivo);
 
 #endif

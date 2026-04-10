@@ -1,27 +1,46 @@
 #include "../include/definicoes.h"
 #include "../include/datamanager.h"
 
-
+/**
+  * @brief Funcionalidade [6]: Busca por registros e atualiza os campos com novos valores.
+  * Simula o comando SQL 'UPDATE'. Localiza registros através de filtros e atualiza seus campos.
+  * Para cada busca realizada, os registros correspondentes devem ser atualizados 
+  * com os novos valores especificados. Vários ciclos de busca&atualização podem ser realizados.
+  * @param arquivoBin Nome do arquivo binário para atualização.
+  * @param n Quantidade de ciclos de busca&atualização a serem realizados.
+  * @return void
+  */
 void func_6(char* arquivoBin, int n){
+
+    REG_DADOS_STRUCT* registros_de_busca = NULL;
+    REG_DADOS_STRUCT* campos_novos = NULL;
+    int* mask_busca = NULL;
+    int* mask_novos = NULL;
 
     // ABRINDO O ARQUIVO:
 
-    // abre o arquivo binário em modo de leitura e escrita
-    FILE* filestream_bin = abre_binario(arquivoBin, "rb+");
+    FILE* filestream_bin = abre_binario(arquivoBin, true); // abre o arquivo binário em modo de leitura e escrita
     if(filestream_bin == NULL){
         printf("Falha no processamento do arquivo.\n");
         return;
     };
 
-    REG_DADOS_STRUCT* registros_de_busca = (REG_DADOS_STRUCT* )malloc(n*sizeof(REG_DADOS_STRUCT));   // Cria um vetor com os registros chaves para busca dos registros a serem atualizados, 
-    REG_DADOS_STRUCT* campos_novos = (REG_DADOS_STRUCT* )malloc(n*sizeof(REG_DADOS_STRUCT));   // Cria um vetor com os valores dos campos a serem atualizados 
-    int* mask_busca = (int* )calloc(n, sizeof(int));  // e tambem dois vetores com um bit mask dos campos para busca e para atualização
-    int* mask_novos = (int* )calloc(n, sizeof(int));
+    // LENDO CAMPOS DE BUSCA E OS VALORES DE ATUALIZAÇÃO:
+
+    registros_de_busca = (REG_DADOS_STRUCT* )malloc(n*sizeof(REG_DADOS_STRUCT));   // Cria um vetor com os registros chaves para busca dos registros a serem atualizados, 
+    campos_novos = (REG_DADOS_STRUCT* )malloc(n*sizeof(REG_DADOS_STRUCT));   // Cria um vetor com os valores dos campos a serem atualizados 
+    mask_busca = (int* )calloc(n, sizeof(int));  // e tambem dois vetores com um bit mask dos campos para busca e para atualização
+    mask_novos = (int* )calloc(n, sizeof(int));
+    if(registros_de_busca == NULL || campos_novos == NULL || mask_busca == NULL || mask_novos == NULL){
+        DEBUG("ERRO EM func_6: ERRO DE ALOCAÇÃO.\n"); goto erro;
+    }
 
     for(int i = 0; i < n; i++){  // lê as n entradas de argumentos para buscas e campos atualizados
         ler_campos(&(registros_de_busca[i]), &(mask_busca[i]));
         ler_campos(&(campos_novos[i]), &(mask_novos[i]));
     }
+
+    // BUSCANDO OS REGISTROS NO ARQUIVO PARA ATUALIZAR
 
     int proxRRN, topoPilha;
 
@@ -35,7 +54,9 @@ void func_6(char* arquivoBin, int n){
 
             if(check_registro(&(registros_de_busca[i]), mask_busca[i], RRN, filestream_bin)){
                
-                atualiza_registro(&(campos_novos[i]), mask_novos[i], RRN, filestream_bin);
+                if(atualiza_registro(&(campos_novos[i]), mask_novos[i], RRN, filestream_bin) == false){
+                    DEBUG("ERRO EM func_6: FALHA AO ATUALIZAR REGISTRO.\n");
+                }
             }
         }
 
@@ -45,9 +66,13 @@ void func_6(char* arquivoBin, int n){
         if (mask_novos[i] & 128) free(campos_novos[i].nomeLinha);
     }
 
-    // ATUALIZANDO CABEÇALHO E FECHANDO ARQUIVO
-    fecha_binario(filestream_bin);
-    // atualizar_cabecalho(arquivoBin, topoPilha, proxRRN); Isso está comentado pois só assim passa no run.codes
+    // FECHANDO ARQUIVO
+    if(fecha_binario(filestream_bin) != 0){
+        DEBUG("DEBUG: ERRO AO FECHAR BIN %s\n", arquivoBin);
+        goto erro;
+    }
+
+    // RETORNANDO
 
     free(registros_de_busca);
     free(campos_novos);
@@ -58,4 +83,18 @@ void func_6(char* arquivoBin, int n){
     #ifdef PRINT_ERROS
     ExibirBinario(arquivoBin);
     #endif
+
+    return;
+
+    erro:
+
+    free(registros_de_busca);
+    free(campos_novos);
+    free(mask_busca);
+    free(mask_novos);
+    if(fecha_binario(filestream_bin) != 0){
+        DEBUG("DEBUG: ERRO AO FECHAR BIN %s\n", arquivoBin);
+    }
+
+    return;
 }
