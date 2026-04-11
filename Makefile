@@ -1,37 +1,32 @@
-# 1. Variables
+# Cleyton José Rodrigues Macedo 16821725
+# Guilherme Cavalcanti de Santana 15456556
+
+# Variáveis
 CC      := gcc
 CFLAGS  := -Wall -Wextra -Iinclude -g
-# -DPRINT_ERROS
+# ADICIONE A SEGUINTE FLAG NA LINHA ACIMA PARA COMPILAR COM DEBUG: -DPRINT_ERROS
 TARGET  := CPTM
 
-# 2. Folders
+# Pastas
 SRC_DIR := src
 OBJ_DIR := obj
 
-# 3. Files
-# Automatically find all .c files in src/
+# Arquivos
 SRCS    := $(wildcard $(SRC_DIR)/*.c)
-# Transform src/file.c into obj/file.o
 OBJS    := $(SRCS:$(SRC_DIR)/%.c=$(OBJ_DIR)/%.o)
 
-# 4. Main Rules
+# Regras
 all: $(TARGET)
 
-# Link the executable
 $(TARGET): $(OBJS)
 	$(CC) $(OBJS) -o $@
 
-# Compile .c to .o
-# The | $(OBJ_DIR) is an "order-only prerequisite" 
-# It ensures the folder exists before compiling
 $(OBJ_DIR)/%.o: $(SRC_DIR)/%.c | $(OBJ_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-# Create the obj directory if it doesn't exist
 $(OBJ_DIR):
 	mkdir -p $(OBJ_DIR)
 
-# Clean up
 clean:
 	rm -rf $(OBJ_DIR) $(TARGET)
 
